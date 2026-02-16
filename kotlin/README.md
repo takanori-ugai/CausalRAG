@@ -9,6 +9,8 @@ This module is the Kotlin port of the Python project described in `../README.MD`
 - Prompt templating with JTE
 - Evaluation pipeline and CLI utilities
 
+Note: The current vector search implementation performs a linear scan over all embeddings per query, which is fine for small corpora. For large collections, consider swapping in an approximate nearest-neighbor index (e.g., HNSW) to keep query latency reasonable.
+
 ## Requirements
 - JDK 21+
 - Gradle (wrapper included)
@@ -85,7 +87,7 @@ pipeline.graphRetriever.retrievePaths("What are the consequences of climate chan
 
 println("\nSupporting contexts:")
 pipeline.hybridRetriever.retrieve("What are the consequences of climate change?", topK = 5)
-    .map { it as String }
+    .mapNotNull { it as? String }
     .forEach { ctx ->
         val preview = if (ctx.length > 100) ctx.substring(0, 100) + "..." else ctx
         println("- $preview")
