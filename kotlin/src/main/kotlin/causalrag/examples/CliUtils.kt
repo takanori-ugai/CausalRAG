@@ -113,7 +113,11 @@ object CliUtils {
                 systemMessage = "You are an expert evaluator assessing the quality of answers to questions.",
             )
 
-        Files.createDirectories(Path.of(config.outputDir))
+        try {
+            Files.createDirectories(Path.of(config.outputDir))
+        } catch (ex: java.io.IOException) {
+            warn("Failed to create output directory ${config.outputDir}: ${ex.message}")
+        }
 
         val metrics =
             listOf(

@@ -105,39 +105,43 @@ object MusiQue {
                 examples.map { example ->
                     async(Dispatchers.IO) {
                         semaphore.withPermit {
-                            val documents = example.paragraphs.map { it.paragraphText }
-                            val pipeline = CausalRAGPipeline(configPath = configPath.toString())
+                            try {
+                                val documents = example.paragraphs.map { it.paragraphText }
+                                val pipeline = CausalRAGPipeline(configPath = configPath.toString())
 
-                            pipeline.index(documents)
-                            val result = pipeline.runWithContext(example.question, topK = 5)
-                            val prediction = result.answer
+                                pipeline.index(documents)
+                                val result = pipeline.runWithContext(example.question, topK = 5)
+                                val prediction = result.answer
 
-                            val golds = listOf(example.answer) + example.answerAliases
-                            println("Answer: $prediction")
-                            println("Gold: $golds")
-                            val em = bestExactMatch(prediction, golds)
-                            val f1 = bestF1(prediction, golds)
-                            exactMatchTotal.add(em)
-                            f1Total.add(f1)
+                                val golds = listOf(example.answer) + example.answerAliases
+                                println("Answer: $prediction")
+                                println("Gold: $golds")
+                                val em = bestExactMatch(prediction, golds)
+                                val f1 = bestF1(prediction, golds)
+                                exactMatchTotal.add(em)
+                                f1Total.add(f1)
 
-                            val count = processed.incrementAndGet()
-                            if ((count % 10) == 0) {
-                                println("Processed $count / ${examples.size} samples")
-                            }
-
-                            val perSample =
-                                buildString {
-                                    appendLine("id: ${example.id}")
-                                    appendLine("question: ${example.question}")
-                                    appendLine("prediction: $prediction")
-                                    appendLine("gold: ${example.answer}")
-                                    if (example.answerAliases.isNotEmpty()) {
-                                        appendLine("aliases: ${example.answerAliases.joinToString(", ")}")
-                                    }
-                                    appendLine("exact_match: $em")
-                                    appendLine("f1: ${"%.4f".format(f1)}")
+                                val count = processed.incrementAndGet()
+                                if ((count % 10) == 0) {
+                                    println("Processed $count / ${examples.size} samples")
                                 }
-                            Files.writeString(resultsDir.resolve("${example.id}.txt"), perSample)
+
+                                val perSample =
+                                    buildString {
+                                        appendLine("id: ${example.id}")
+                                        appendLine("question: ${example.question}")
+                                        appendLine("prediction: $prediction")
+                                        appendLine("gold: ${example.answer}")
+                                        if (example.answerAliases.isNotEmpty()) {
+                                            appendLine("aliases: ${example.answerAliases.joinToString(", ")}")
+                                        }
+                                        appendLine("exact_match: $em")
+                                        appendLine("f1: ${"%.4f".format(f1)}")
+                                    }
+                                Files.writeString(resultsDir.resolve("${example.id}.txt"), perSample)
+                            } catch (ex: Exception) {
+                                System.err.println("Error processing sample ${example.id}: ${ex.message}")
+                            }
                         }
                     }
                 }
@@ -166,7 +170,9 @@ object MusiQue {
         baseUrl: String?,
     ): Path {
         val tempDir = Files.createTempDirectory("causalrag-musique")
+        tempDir.toFile().deleteOnExit()
         val configPath = tempDir.resolve("musique-config.json")
+        configPath.toFile().deleteOnExit()
         val json =
             JsonObject(
                 mapOf(

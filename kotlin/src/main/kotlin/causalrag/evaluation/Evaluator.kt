@@ -116,7 +116,7 @@ class CausalEvaluator(
                 val scores =
                     questions.indices.map { idx ->
                         val paths = causalPaths[idx]
-                        if (paths.isEmpty()) return@map 1.0
+                        if (paths.isEmpty()) return@map Double.NaN
                         val pathsText = paths.joinToString("\n") { it.joinToString(" -> ") }
                         val prompt =
                             """
@@ -137,7 +137,12 @@ Rating:
                         val response = llmInterface.generate(prompt, temperature = 0.1)
                         parseScore(response)
                     }
-                metrics["causal_consistency"] = scores.average()
+                val validScores = scores.filter { it.isFinite() }
+                if (validScores.isEmpty()) {
+                    errors["causal_consistency"] = "No causal paths available for evaluation."
+                } else {
+                    metrics["causal_consistency"] = validScores.average()
+                }
                 detailed["causal_consistency"] = scores
             }
 
@@ -145,7 +150,7 @@ Rating:
                 val scores =
                     questions.indices.map { idx ->
                         val paths = causalPaths[idx]
-                        if (paths.isEmpty()) return@map 1.0
+                        if (paths.isEmpty()) return@map Double.NaN
                         val factors = paths.flatten().toSet()
                         val factorsText = factors.joinToString("\n") { "- $it" }
                         val prompt =
@@ -167,7 +172,12 @@ Rating:
                         val response = llmInterface.generate(prompt, temperature = 0.1)
                         parseScore(response)
                     }
-                metrics["causal_completeness"] = scores.average()
+                val validScores = scores.filter { it.isFinite() }
+                if (validScores.isEmpty()) {
+                    errors["causal_completeness"] = "No causal paths available for evaluation."
+                } else {
+                    metrics["causal_completeness"] = validScores.average()
+                }
                 detailed["causal_completeness"] = scores
             }
         } catch (ex: Exception) {

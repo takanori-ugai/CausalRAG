@@ -276,13 +276,13 @@ Write a concise explanation using simple natural language that maintains all the
         }
         builder.append(
             """
-Question: $query
-
-Your structured causal answer:
-1. Causal factors:
-2. Causal mechanisms:
-3. Conclusion:
-            """.trimIndent(),
+            |Question: $query
+            |
+            |Your structured causal answer:
+            |1. Causal factors:
+            |2. Causal mechanisms:
+            |3. Conclusion:
+            """.trimMargin(),
         )
         return builder.toString()
     }
@@ -346,14 +346,14 @@ Your structured causal answer:
         }
         builder.append(
             """
-QUESTION: $query
-
-STEP-BY-STEP REASONING:
-1) Key concepts in this question are:
-2) Relevant causal relationships from the context:
-3) Tracing the causal chain:
-4) Therefore, the answer is:
-            """.trimIndent(),
+            |QUESTION: $query
+            |
+            |STEP-BY-STEP REASONING:
+            |1) Key concepts in this question are:
+            |2) Relevant causal relationships from the context:
+            |3) Tracing the causal chain:
+            |4) Therefore, the answer is:
+            """.trimMargin(),
         )
         return builder.toString()
     }

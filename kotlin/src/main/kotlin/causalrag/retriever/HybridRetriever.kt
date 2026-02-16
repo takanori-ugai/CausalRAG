@@ -119,7 +119,7 @@ class HybridRetriever(
         val semanticResults =
             try {
                 vectorRetriever.searchWithScores(query, topK = expandedK)
-            } catch (ex: RuntimeException) {
+            } catch (ex: Exception) {
                 logger.error(ex) { "Error retrieving vector results" }
                 emptyList()
             }
@@ -133,7 +133,7 @@ class HybridRetriever(
                         val score = result["score"] as Double
                         passage to score
                     }
-                } catch (ex: RuntimeException) {
+                } catch (ex: Exception) {
                     logger.error(ex) { "Error retrieving BM25 results" }
                     emptyMap()
                 }
@@ -149,14 +149,14 @@ class HybridRetriever(
         val pathNodes =
             try {
                 graphRetriever.retrievePathNodes(query)
-            } catch (ex: RuntimeException) {
+            } catch (ex: Exception) {
                 logger.error(ex) { "Error retrieving causal nodes" }
                 emptyList()
             }
         val causalPaths =
             try {
                 graphRetriever.retrievePaths(query, maxPaths = 3)
-            } catch (ex: RuntimeException) {
+            } catch (ex: Exception) {
                 logger.error(ex) { "Error retrieving causal paths" }
                 emptyList()
             }

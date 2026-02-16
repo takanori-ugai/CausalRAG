@@ -675,7 +675,7 @@ class CausalGraphBuilder(
                 )
             }
 
-        val density = if (nodes > 1) edges.toDouble() / (nodes * (nodes - 1)) else 0.0
+        val density = if (nodes > 1) edges.toDouble() / (nodes.toLong() * (nodes - 1)) else 0.0
 
         val isDag = graph.isDag()
         val hasCycles = graph.hasCycle()
