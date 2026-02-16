@@ -39,6 +39,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.14")
     implementation("com.github.haifengl:smile-core:4.4.2")
+    implementation("gg.jte:jte-kotlin:3.1.16")
 
     // LangChain4j dependencies
     implementation("dev.langchain4j:langchain4j:1.9.1")

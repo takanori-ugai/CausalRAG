@@ -167,11 +167,32 @@ class CausalTripleExtractor(
     }
 
     private fun createCausalExtractionPrompt(text: String): String =
-        """Extract all causal relationships from the text below as a JSON ARRAY of objects.
+        """Extract all causal relationships from the text below as a JSON list of objects.
 Each object should have 'cause', 'effect', and 'confidence' (0.0-1.0) fields.
 Focus only on causal relationships, not merely correlations or temporal sequences.
 
-Your response MUST be a JSON array and nothing else. Do not wrap it in an object.
+TYPES OF CAUSAL RELATIONSHIPS TO IDENTIFY:
+1. Direct causation: A directly causes B (e.g., "smoking causes lung cancer")
+2. Mediated causation: A causes B through C (e.g., "smoking damages lung tissue, which leads to cancer")
+3. Enabling causation: A creates conditions for B to occur (e.g., "drought creates conditions for wildfires")
+4. Preventive causation: A prevents or reduces B (e.g., "vaccines prevent disease")
+5. Contributory causation: A contributes to or increases risk of B (e.g., "pollution contributes to respiratory problems")
+
+CONFIDENCE SCORING CRITERIA (0.0-1.0):
+- 0.9-1.0: Explicit, unambiguous causal claim with strong causal language (causes, leads to, results in)
+- 0.7-0.8: Clear causal relationship but with less explicit language (contributes to, influences)
+- 0.5-0.6: Implied causation requiring some inference (associated with + mechanism described)
+- 0.3-0.4: Suggested but uncertain causation (may cause, could lead to, is linked to)
+- < 0.3: Primarily correlational or too uncertain to include
+
+EXTRACTION GUIDELINES:
+1. Focus on factual causal claims, not hypothetical or counterfactual statements
+2. Extract the most specific cause and effect possible, avoiding overly general concepts
+3. For complex causal chains (A→B→C→D), extract all individual links (A→B, B→C, C→D)
+4. When multiple causes lead to the same effect, extract each relationship separately
+5. Normalize forms but preserve key content (e.g., "global warming" vs "climate change")
+6. Capture directional relationships correctly (what causes what)
+7. When confidence is below 0.5, only include if the relationship is particularly significant
 
 TEXT:
 $text
@@ -179,7 +200,9 @@ $text
 OUTPUT FORMAT:
 [
   {"cause": "climate change", "effect": "rising sea levels", "confidence": 0.95},
-  {"cause": "rising sea levels", "effect": "coastal flooding", "confidence": 0.9}
+  {"cause": "rising sea levels", "effect": "coastal flooding", "confidence": 0.9},
+  {"cause": "deforestation", "effect": "increased atmospheric CO2", "confidence": 0.85},
+  {"cause": "regular exercise", "effect": "reduced risk of heart disease", "confidence": 0.8}
 ]
 
 Ensure your response contains ONLY the valid JSON array. Do not include any other explanation or text.

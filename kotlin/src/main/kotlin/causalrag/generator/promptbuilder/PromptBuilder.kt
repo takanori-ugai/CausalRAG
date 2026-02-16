@@ -29,6 +29,20 @@ class PromptBuilder(
             } else {
                 null
             }
+        val jteRendered =
+            JtePromptRenderer(templatesDir).render(
+                templateStyle,
+                JtePromptRenderer.Model(
+                    query = query,
+                    passages = passages,
+                    causalPaths = normalizedPaths,
+                    causalGraphSummary = causalGraphSummary,
+                    pathSummaries = pathSummaries,
+                ),
+            )
+        if (jteRendered != null) {
+            return jteRendered
+        }
         val template = loadTemplate(templateStyle)
         if (template != null) {
             val renderer = TemplateRenderer()

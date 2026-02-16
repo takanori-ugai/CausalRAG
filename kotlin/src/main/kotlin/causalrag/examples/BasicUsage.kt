@@ -37,11 +37,20 @@ fun main() {
         println("Query: $query")
         println("=".repeat(80))
 
-        val answer = pipeline.run(query)
+        val context = pipeline.hybridRetriever.retrieve(query, topK = 3).map { it as String }
+        val causalNodes = pipeline.graphRetriever.retrievePathNodes(query)
+        val prompt = causalrag.generator.promptbuilder.buildPrompt(
+            query = query,
+            passages = context,
+            causalNodes = causalNodes,
+            templateStyle = "detailed",
+        )
+        println("\nPrompt:\n$prompt")
+
+        val answer = pipeline.llm.generate(prompt)
         println("\nAnswer: $answer")
 
         println("\nSupporting context:")
-        val context = pipeline.hybridRetriever.retrieve(query, topK = 3).map { it as String }
         context.forEachIndexed { idx, ctx ->
             val preview = if (ctx.length > 200) ctx.substring(0, 200) + "..." else ctx
             println("[${idx + 1}] $preview")
