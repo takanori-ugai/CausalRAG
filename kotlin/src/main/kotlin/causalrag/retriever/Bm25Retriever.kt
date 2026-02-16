@@ -17,7 +17,11 @@ class Bm25Retriever(
     private var avgDocLength: Double = 0.0
     private var numDocs: Int = 0
 
-    private fun tokenizeInternal(text: String): List<String> = Regex("\\w+").findAll(text.lowercase()).map { it.value }.toList()
+    override fun tokenize(text: String): List<String> = WORD_REGEX.findAll(text.lowercase()).map { it.value }.toList()
+
+    companion object {
+        private val WORD_REGEX = Regex("\\w+")
+    }
 
     internal fun indexDocuments(texts: List<String>) {
         passages = texts
@@ -28,7 +32,7 @@ class Bm25Retriever(
         avgDocLength = 0.0
 
         for (doc in texts) {
-            val tokens = tokenizeInternal(doc)
+            val tokens = tokenize(doc)
             val tf = mutableMapOf<String, Int>()
             for (token in tokens) {
                 tf[token] = (tf[token] ?: 0) + 1
@@ -57,8 +61,9 @@ class Bm25Retriever(
         topK: Int,
     ): List<Map<String, Any>> {
         if (numDocs == 0) return emptyList()
-        val terms = tokenizeInternal(processQuery(query))
+        val terms = tokenize(processQuery(query))
         if (terms.isEmpty()) return emptyList()
+        if (avgDocLength == 0.0) return emptyList()
 
         val scores = DoubleArray(numDocs)
         for (term in terms) {

@@ -240,8 +240,22 @@ Overall rating:
             } else {
                 lines.joinToString(" ")
             }
-        val match = Regex("(\\d+(\\.\\d+)?)").find(allText)
-        val value = match?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: defaultScore
+        val fractionMatch = Regex("(\\d+(?:\\.\\d+)?)\\s*/\\s*10").find(allText)
+        val value =
+            when {
+                fractionMatch != null -> {
+                    fractionMatch.groupValues.getOrNull(1)?.toDoubleOrNull() ?: defaultScore
+                }
+
+                else -> {
+                    val matches = Regex("(\\d+(?:\\.\\d+)?)").findAll(allText).toList()
+                    matches
+                        .lastOrNull()
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        ?.toDoubleOrNull() ?: defaultScore
+                }
+            }
         val normalized = value / 10.0
         return min(max(normalized, 0.0), 1.0)
     }
@@ -306,7 +320,12 @@ Overall rating:
         result.detailedScores.forEach { (metric, scores) ->
             val avg = scores.average()
             val sorted = scores.sorted()
-            val median = if (sorted.isEmpty()) 0.0 else sorted[sorted.size / 2]
+            val median =
+                when {
+                    sorted.isEmpty() -> 0.0
+                    sorted.size % 2 == 1 -> sorted[sorted.size / 2]
+                    else -> (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2.0
+                }
             val minVal = scores.minOrNull() ?: 0.0
             val maxVal = scores.maxOrNull() ?: 0.0
             builder.append("### $metric\n")

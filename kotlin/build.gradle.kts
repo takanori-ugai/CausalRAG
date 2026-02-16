@@ -1,5 +1,4 @@
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
-import java.io.File
 
 plugins {
     kotlin("jvm") version "2.3.10"
@@ -30,7 +29,6 @@ application {
 
 repositories {
     mavenCentral()
-    gradlePluginPortal()
 }
 
 dependencies {
@@ -63,13 +61,7 @@ tasks {
 
     val execute by registering(JavaExec::class) {
         group = "application"
-        mainClass.set(
-            if (project.hasProperty("mainClass")) {
-                project.property("mainClass") as String
-            } else {
-                application.mainClass.get()
-            },
-        )
+        mainClass.set(application.mainClass)
         classpath = sourceSets.main.get().runtimeClasspath
     }
 }

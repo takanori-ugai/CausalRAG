@@ -52,12 +52,12 @@ class LLMInterface(
                 }
 
                 else -> {
-                    "Unsupported provider: $providerName"
+                    throw IllegalArgumentException("Unsupported provider: $providerName")
                 }
             }
-        } catch (ex: RuntimeException) {
+        } catch (ex: Exception) {
             logger.error(ex) { "Error generating completion" }
-            "Error generating response: ${ex.message}"
+            throw ex
         }
     }
 

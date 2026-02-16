@@ -13,6 +13,8 @@ class PromptBuilder(
     private val llmInterface: LLMInterface? = null,
     private val templatesDir: String? = null,
 ) {
+    private val jteRenderer = JtePromptRenderer(templatesDir)
+
     fun buildPrompt(
         query: String,
         passages: List<String>,
@@ -28,7 +30,7 @@ class PromptBuilder(
                 null
             }
         val jteRendered =
-            JtePromptRenderer(templatesDir).render(
+            jteRenderer.render(
                 templateStyle,
                 JtePromptRenderer.Model(
                     query = query,
@@ -95,7 +97,7 @@ Write a concise explanation using simple natural language that maintains all the
                 }
             }
             summaries
-        } catch (ex: RuntimeException) {
+        } catch (ex: Exception) {
             logger.error(ex) { "Error generating causal summaries" }
             emptyList()
         }
@@ -357,6 +359,7 @@ STEP-BY-STEP REASONING:
     }
 
     private fun loadTemplate(style: String): String? {
+        require(style.matches(Regex("[a-zA-Z0-9_]+"))) { "Invalid template style: $style" }
         val filename = "causal_prompt_$style.txt"
         val fallback = "causal_prompt.txt"
         val fromDir =

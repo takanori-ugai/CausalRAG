@@ -1,7 +1,5 @@
 package causalrag.causalgraph.graph
 
-import kotlin.math.max
-
 class DirectedGraph {
     private val outEdges: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
     private val inEdges: MutableMap<String, MutableSet<String>> = mutableMapOf()
@@ -57,15 +55,7 @@ class DirectedGraph {
         to: String,
     ): Double? = outEdges[from]?.get(to)
 
-    fun maxEdgeWeight(): Double? {
-        val allEdges = edges()
-        if (allEdges.isEmpty()) return null
-        var best = allEdges.first().weight
-        for (edge in allEdges) {
-            best = max(best, edge.weight)
-        }
-        return best
-    }
+    fun maxEdgeWeight(): Double? = edges().maxOfOrNull { it.weight }
 
     fun clear() {
         outEdges.clear()
@@ -137,7 +127,7 @@ class DirectedGraph {
             path: MutableList<String>,
             visited: MutableSet<String>,
         ) {
-            if (depth > maxDepth || results.size >= limit) return
+            if (depth >= maxDepth || results.size >= limit) return
             if (current == target) {
                 results.add(path.toList())
                 return

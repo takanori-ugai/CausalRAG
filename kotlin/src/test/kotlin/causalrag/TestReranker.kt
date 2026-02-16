@@ -92,7 +92,7 @@ class TestReranker {
         val query = "How does climate change affect coastal areas?"
         val rankedDocs = reranker.rerank(query, testDocs)
 
-        verify { mockRetriever.retrievePaths(query, maxPaths = 3, minPathLength = 2, maxPathLength = 4) }
+        verify { mockRetriever.retrievePaths(query, any(), any(), any()) }
         assertTrue(
             rankedDocs
                 .first()

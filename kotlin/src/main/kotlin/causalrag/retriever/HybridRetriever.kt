@@ -2,7 +2,8 @@ package causalrag.retriever
 
 import causalrag.causalgraph.retriever.CausalPathRetriever
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
+import java.util.LinkedHashMap
 
 private val logger = KotlinLogging.logger {}
 
@@ -17,10 +18,24 @@ class HybridRetriever(
     private val rerankingFactor: Int = 2,
     private val minCausalMatches: Int = 1,
     private val cacheResults: Boolean = true,
+    private val cacheMaxEntries: Int = 1000,
 ) {
-    private val queryCache: MutableMap<String, List<Map<String, Any>>> = ConcurrentHashMap()
+    private val queryCache: MutableMap<String, List<Map<String, Any>>> =
+        if (cacheResults) {
+            Collections.synchronizedMap(
+                object : LinkedHashMap<String, List<Map<String, Any>>>(16, 0.75f, true) {
+                    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Map<String, Any>>>?): Boolean =
+                        size > cacheMaxEntries
+                },
+            )
+        } else {
+            mutableMapOf()
+        }
 
     init {
+        if (cacheResults) {
+            require(cacheMaxEntries > 0) { "cacheMaxEntries must be positive when cacheResults is enabled." }
+        }
         val total = semanticWeight + causalWeight + bm25Weight
         if (kotlin.math.abs(total - 1.0) > 1e-9) {
             semanticWeight /= total
@@ -91,9 +106,11 @@ class HybridRetriever(
         query: String,
         topK: Int = 5,
     ): List<Map<String, Any>> {
-        if (cacheResults && queryCache.containsKey(query)) {
-            val cached = queryCache[query] ?: emptyList()
-            return cached.take(topK)
+        if (cacheResults) {
+            val cached = queryCache[query]
+            if (cached != null) {
+                return cached.take(topK)
+            }
         }
 
         val expandedK = topK * rerankingFactor

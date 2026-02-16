@@ -37,30 +37,18 @@ fun main() {
         println("Query: $query")
         println("=".repeat(80))
 
-        val context = pipeline.retrieveContext(query, topK = 3)
-        val causalNodes = pipeline.graphRetriever.retrievePathNodes(query)
-        val prompt =
-            causalrag.generator.promptbuilder.buildPrompt(
-                query = query,
-                passages = context,
-                causalNodes = causalNodes,
-                templateStyle = "detailed",
-            )
-        println("\nPrompt:\n$prompt")
-
-        val answer = pipeline.llm.generate(prompt)
-        println("\nAnswer: $answer")
+        val result = pipeline.runWithContext(query, topK = 3)
+        println("\nAnswer: ${result.answer}")
 
         println("\nSupporting context:")
-        context.forEachIndexed { idx, ctx ->
+        result.context.forEachIndexed { idx, ctx ->
             val preview = if (ctx.length > 200) ctx.substring(0, 200) + "..." else ctx
             println("[${idx + 1}] $preview")
         }
 
-        val causalPaths = pipeline.retrieveCausalPaths(query, maxPaths = 3)
-        if (causalPaths.isNotEmpty()) {
+        if (result.causalPaths.isNotEmpty()) {
             println("\nRelevant causal pathways:")
-            causalPaths.forEach { path ->
+            result.causalPaths.forEach { path ->
                 println("- ${path.joinToString(" -> ")}")
             }
         }

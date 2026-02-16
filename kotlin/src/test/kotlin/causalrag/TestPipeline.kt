@@ -56,8 +56,10 @@ class TestPipeline {
     fun testQueryExecution() {
         val pipeline = CausalRAGPipeline(configPath = configPath.toString())
         pipeline.index(testDocs)
-        val answer = pipeline.run("What causes coastal flooding?")
-        assertTrue(answer.isNotBlank())
+        val context = pipeline.retrieveContext("What causes coastal flooding?", topK = 3)
+        assertTrue(context.isNotEmpty())
+        val paths = pipeline.retrieveCausalPaths("What causes coastal flooding?", maxPaths = 3)
+        assertTrue(paths.isNotEmpty())
     }
 
     @Test
@@ -74,8 +76,10 @@ class TestPipeline {
         val loaded = pipeline2.load(saveDir.toString())
         assertTrue(loaded)
 
-        val answer = pipeline2.run("What is climate change?")
-        assertTrue(answer.isNotBlank())
+        val context = pipeline2.retrieveContext("What is climate change?", topK = 3)
+        assertTrue(context.isNotEmpty())
+        val paths = pipeline2.retrieveCausalPaths("What is climate change?", maxPaths = 3)
+        assertTrue(paths.isNotEmpty())
     }
 
     private fun writeTestConfig(path: Path) {

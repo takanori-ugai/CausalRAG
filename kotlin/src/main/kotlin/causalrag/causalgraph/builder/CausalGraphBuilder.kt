@@ -516,52 +516,60 @@ class CausalGraphBuilder(
         }
     }
 
-    fun save(filepath: String) {
-        val json = Json { prettyPrint = true }
-        val nodeJson =
-            buildJsonObject {
-                for ((k, v) in _nodeText) {
-                    put(k, v)
-                }
-            }
-        val variantsJson =
-            buildJsonObject {
-                for ((k, v) in nodeVariants) {
-                    putJsonArray(k) {
-                        v.forEach { add(JsonPrimitive(it)) }
+    fun save(filepath: String): Boolean =
+        try {
+            val json = Json { prettyPrint = true }
+            val nodeJson =
+                buildJsonObject {
+                    for ((k, v) in _nodeText) {
+                        put(k, v)
                     }
                 }
-            }
-        val edgesJsonArray =
-            JsonArray(
-                graph.edges().map { edge ->
-                    buildJsonObject {
-                        put("from", edge.from)
-                        put("to", edge.to)
-                        put("weight", edge.weight)
+            val variantsJson =
+                buildJsonObject {
+                    for ((k, v) in nodeVariants) {
+                        putJsonArray(k) {
+                            v.forEach { add(JsonPrimitive(it)) }
+                        }
                     }
-                },
-            )
-        val root =
-            buildJsonObject {
-                put("nodes", nodeJson)
-                put("variants", variantsJson)
-                put("edges", edgesJsonArray)
-                if (_nodeEmbeddings.isNotEmpty()) {
-                    put(
-                        "embeddings",
+                }
+            val edgesJsonArray =
+                JsonArray(
+                    graph.edges().map { edge ->
                         buildJsonObject {
-                            for ((nodeId, emb) in _nodeEmbeddings) {
-                                putJsonArray(nodeId) {
-                                    emb.forEach { add(JsonPrimitive(it)) }
+                            put("from", edge.from)
+                            put("to", edge.to)
+                            put("weight", edge.weight)
+                        }
+                    },
+                )
+            val root =
+                buildJsonObject {
+                    put("nodes", nodeJson)
+                    put("variants", variantsJson)
+                    put("edges", edgesJsonArray)
+                    if (_nodeEmbeddings.isNotEmpty()) {
+                        put(
+                            "embeddings",
+                            buildJsonObject {
+                                for ((nodeId, emb) in _nodeEmbeddings) {
+                                    putJsonArray(nodeId) {
+                                        emb.forEach { add(JsonPrimitive(it)) }
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
-            }
-        Files.writeString(Path.of(filepath), json.encodeToString(JsonElement.serializer(), root))
-    }
+            Files.writeString(Path.of(filepath), json.encodeToString(JsonElement.serializer(), root))
+            true
+        } catch (ex: IOException) {
+            logger.error(ex) { "Error saving graph to $filepath" }
+            false
+        } catch (ex: RuntimeException) {
+            logger.error(ex) { "Error saving graph to $filepath" }
+            false
+        }
 
     fun load(filepath: String): Boolean {
         val path = Path.of(filepath)

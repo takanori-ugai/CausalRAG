@@ -288,6 +288,8 @@ class VectorStoreRetriever(
         buildJsonObject {
             for ((k, v) in map) {
                 when (v) {
+                    is Int -> put(k, v)
+                    is Long -> put(k, v)
                     is Number -> put(k, v.toDouble())
                     is Boolean -> put(k, v)
                     else -> put(k, v.toString())

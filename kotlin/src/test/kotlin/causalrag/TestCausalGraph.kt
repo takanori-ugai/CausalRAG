@@ -7,6 +7,7 @@ import java.nio.file.Path
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class TestCausalGraph {
@@ -59,8 +60,8 @@ class TestCausalGraph {
         assertTrue(reloaded.numberOfNodes() > 0)
         assertTrue(reloaded.numberOfEdges() > 0)
         assertTrue(hasRelation("climate change", "rising sea levels", newBuilder))
-        assertTrue(original.numberOfNodes() == reloaded.numberOfNodes())
-        assertTrue(original.numberOfEdges() == reloaded.numberOfEdges())
+        assertEquals(original.numberOfNodes(), reloaded.numberOfNodes(), "Node count mismatch after reload")
+        assertEquals(original.numberOfEdges(), reloaded.numberOfEdges(), "Edge count mismatch after reload")
     }
 
     @Test

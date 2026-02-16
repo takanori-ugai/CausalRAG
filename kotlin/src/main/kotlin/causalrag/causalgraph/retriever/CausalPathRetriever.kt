@@ -11,6 +11,7 @@ private val logger = KotlinLogging.logger {}
 @Suppress("TooGenericExceptionCaught")
 class CausalPathRetriever(
     private val builder: CausalGraphBuilder,
+    private val similarNodeThreshold: Double = 0.8,
 ) {
     private val graph: DirectedGraph = builder.getGraph()
     private val nodeEmbeddings = builder.nodeEmbeddings
@@ -69,7 +70,7 @@ class CausalPathRetriever(
                     for ((nodeId, emb) in nodeEmbeddings) {
                         if (nodeId !in pathNodes) {
                             val sim = cosineSimilarity(avgEmb, emb)
-                            if (sim > 0.8) {
+                            if (sim > similarNodeThreshold) {
                                 pathNodes.add(nodeId)
                             }
                         }

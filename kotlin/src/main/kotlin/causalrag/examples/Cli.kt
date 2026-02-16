@@ -1,9 +1,6 @@
 package causalrag.examples
 
 import causalrag.CausalRAGPipeline
-import causalrag.evaluation.CausalEvaluator
-import causalrag.evaluation.EvalExample
-import causalrag.generator.llm.LLMInterface
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -136,50 +133,29 @@ private fun handleEvaluate(args: List<String>) {
         return
     }
 
-    val pipeline = CausalRAGPipeline(modelName = modelName, embeddingModel = embeddingModel)
-    if (indexDir != null) {
-        val loaded = pipeline.load(indexDir)
-        if (!loaded) {
-            println("Failed to load index from $indexDir; evaluation may lack causal paths.")
-        }
-    } else {
-        println("No --index provided; evaluation will run without a prebuilt graph.")
-    }
-    val llm =
-        LLMInterface(
-            modelName = evalModel ?: modelName,
-            apiKey = apiKey,
-            provider = provider,
-            systemMessage = "You are an expert evaluator assessing the quality of answers to questions.",
+    val result =
+        CliUtils.runEvaluation(
+            config =
+                CliUtils.EvalRunConfig(
+                    evalDataPath = evalData,
+                    outputDir = outputDir,
+                    modelName = modelName,
+                    evalModel = evalModel,
+                    embeddingModel = embeddingModel,
+                    apiKey = apiKey,
+                    provider = provider,
+                    indexDir = indexDir,
+                ),
+            warn = { msg -> println(msg) },
+            error = { msg -> println(msg) },
         )
-
-    val evalExamples = CliUtils.loadEvaluationData(evalData)
-    if (evalExamples.isEmpty()) {
-        println("No evaluation examples found in $evalData")
-        return
-    }
-
-    val metrics =
-        listOf(
-            "causal_consistency",
-            "causal_completeness",
-            "answer_quality",
-        )
-
-    val results =
-        CausalEvaluator.evaluatePipeline(
-            pipeline = pipeline,
-            evalData = evalExamples,
-            metrics = metrics,
-            llmInterface = llm,
-            resultsDir = outputDir,
-        )
+            ?: return
 
     println("Evaluation complete! Summary:")
-    results.metrics.forEach { (metric, score) ->
+    result.results.metrics.forEach { (metric, score) ->
         println("  $metric: ${"%.4f".format(score)}")
     }
-    println("Detailed results saved to $outputDir")
+    println("Detailed results saved to ${result.outputDir}")
 }
 
 private fun loadDocuments(input: String): List<String> {

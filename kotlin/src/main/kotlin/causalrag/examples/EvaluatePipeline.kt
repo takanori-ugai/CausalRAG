@@ -1,12 +1,6 @@
 package causalrag.examples
 
-import causalrag.CausalRAGPipeline
-import causalrag.evaluation.CausalEvaluator
-import causalrag.evaluation.EvalExample
-import causalrag.generator.llm.LLMInterface
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.nio.file.Files
-import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
 
@@ -26,54 +20,30 @@ fun main(args: Array<String>) {
     val indexDir = options["index"]
 
     logger.info { "Initializing pipeline..." }
-    val pipeline = CausalRAGPipeline(modelName = modelName, embeddingModel = embeddingModel)
-    if (indexDir != null) {
-        val loaded = pipeline.load(indexDir)
-        if (!loaded) {
-            logger.warn { "Failed to load index from $indexDir; evaluation may lack causal paths." }
-        }
-    } else {
-        logger.warn { "No --index provided; evaluation will run without a prebuilt graph." }
-    }
-
     logger.info { "Loading evaluation data from $evalDataPath" }
-    val evalData = CliUtils.loadEvaluationData(evalDataPath)
-    if (evalData.isEmpty()) {
-        logger.error { "No evaluation examples found in $evalDataPath" }
-        return
-    }
-
-    val llm =
-        LLMInterface(
-            modelName = evalModel ?: modelName,
-            apiKey = apiKey,
-            provider = provider,
-            systemMessage = "You are an expert evaluator assessing the quality of answers to questions.",
-        )
-
-    Files.createDirectories(Path.of(outputDir))
-
-    val metrics =
-        listOf(
-            "causal_consistency",
-            "causal_completeness",
-            "answer_quality",
-        )
-
     logger.info { "Running evaluation..." }
-    val results =
-        CausalEvaluator.evaluatePipeline(
-            pipeline = pipeline,
-            evalData = evalData,
-            metrics = metrics,
-            llmInterface = llm,
-            resultsDir = outputDir,
+    val result =
+        CliUtils.runEvaluation(
+            config =
+                CliUtils.EvalRunConfig(
+                    evalDataPath = evalDataPath,
+                    outputDir = outputDir,
+                    modelName = modelName,
+                    evalModel = evalModel,
+                    embeddingModel = embeddingModel,
+                    apiKey = apiKey,
+                    provider = provider,
+                    indexDir = indexDir,
+                ),
+            warn = { msg -> logger.warn { msg } },
+            error = { msg -> logger.error { msg } },
         )
+            ?: return
 
     logger.info { "Evaluation complete! Summary:" }
-    results.metrics.forEach { (metric, score) ->
+    result.results.metrics.forEach { (metric, score) ->
         logger.info { "  $metric: ${"%.4f".format(score)}" }
     }
 
-    logger.info { "Detailed results saved to $outputDir" }
+    logger.info { "Detailed results saved to ${result.outputDir}" }
 }

@@ -122,9 +122,9 @@ class CausalRAGPipeline(
         try {
             val path = Path.of(dir)
             Files.createDirectories(path)
-            graphBuilder.save(path.resolve("graph.json").toString())
-            vectorRetriever.saveIndex(path.resolve("vector_cache").toString())
-            true
+            val graphSaved = graphBuilder.save(path.resolve("graph.json").toString())
+            val vectorsSaved = vectorRetriever.saveIndex(path.resolve("vector_cache").toString())
+            graphSaved && vectorsSaved
         } catch (ex: IOException) {
             logger.error(ex) { "Failed to save pipeline data to $dir" }
             false
@@ -180,6 +180,7 @@ class CausalRAGPipeline(
             buildPrompt(
                 query,
                 rerankedPassages,
+                causalPaths = causalPaths,
                 causalNodes = causalNodes,
                 templateStyle = effectiveTemplateStyle,
             )
