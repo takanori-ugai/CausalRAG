@@ -104,7 +104,7 @@ class CausalTripleExtractor(
             }
 
             else -> {
-                val ruleTriples = ruleBasedExtraction(text)
+                val ruleTriples = deduplicateTriples(ruleBasedExtraction(text))
                 if (llmInterface != null) {
                     val llmTriples = llmBasedExtraction(text)
                     val existing = ruleTriples.map { it.cause.lowercase() + "|" + it.effect.lowercase() }.toSet()
@@ -176,7 +176,7 @@ class CausalTripleExtractor(
                         jsonArrayMode = true,
                     )
                 allTriples.addAll(parseLlmResponse(response))
-            } catch (ex: RuntimeException) {
+            } catch (ex: Exception) {
                 logger.error(ex) { "Error during LLM extraction" }
             }
         }
@@ -397,6 +397,7 @@ class CausalGraphBuilder(
     modelName: String = "all-MiniLM-L6-v2",
     private val normalizeNodes: Boolean = true,
     private val confidenceThreshold: Double = 0.5,
+    private val nodeMergeSimilarityThreshold: Double = 0.85,
     extractorMethod: String = "hybrid",
     llmInterface: LLMInterface? = null,
     graphPath: String? = null,
@@ -451,9 +452,10 @@ class CausalGraphBuilder(
         val textEmb = encoder.encode(text)
         var bestMatch: String? = null
         var bestScore = 0.0
+        // Linear scan over embeddings; acceptable for small graphs, can be optimized if needed.
         for ((nodeId, emb) in _nodeEmbeddings) {
             val score = cosineSimilarity(textEmb, emb)
-            if (score > 0.85 && score > bestScore) {
+            if (score > nodeMergeSimilarityThreshold && score > bestScore) {
                 bestMatch = nodeId
                 bestScore = score
             }

@@ -59,6 +59,7 @@ tasks {
         }
     }
 
+    // Separate task for scriptable/CLI runs; keeps `run` intact for IDE defaults.
     val execute by registering(JavaExec::class) {
         group = "application"
         mainClass.set(application.mainClass)

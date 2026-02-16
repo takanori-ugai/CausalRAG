@@ -183,6 +183,7 @@ class CausalRAGPipeline(
                 causalPaths = causalPaths,
                 causalNodes = causalNodes,
                 templateStyle = effectiveTemplateStyle,
+                llmInterface = llm,
             )
 
         // Step 4: Generate answer

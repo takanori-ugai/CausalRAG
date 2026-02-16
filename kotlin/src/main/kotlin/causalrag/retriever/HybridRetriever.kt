@@ -37,6 +37,7 @@ class HybridRetriever(
             require(cacheMaxEntries > 0) { "cacheMaxEntries must be positive when cacheResults is enabled." }
         }
         val total = semanticWeight + causalWeight + bm25Weight
+        require(total > 0.0) { "Sum of semanticWeight, causalWeight, and bm25Weight must be positive." }
         if (kotlin.math.abs(total - 1.0) > 1e-9) {
             semanticWeight /= total
             causalWeight /= total
@@ -68,6 +69,7 @@ class HybridRetriever(
                 if (passageLower.contains(cause) && passageLower.contains(effect)) {
                     val causePos = passageLower.indexOf(cause)
                     val effectPos = passageLower.indexOf(effect)
+                    // Heuristic assumes cause appears before effect; reversed phrasing may be missed.
                     if (causePos < effectPos) {
                         pathMatches.add(cause to effect)
                     }

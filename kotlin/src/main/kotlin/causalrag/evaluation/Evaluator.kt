@@ -170,7 +170,7 @@ Rating:
                 metrics["causal_completeness"] = scores.average()
                 detailed["causal_completeness"] = scores
             }
-        } catch (ex: RuntimeException) {
+        } catch (ex: Exception) {
             logger.error(ex) { "Error in causal evaluation" }
             errors["causal_evaluation"] = ex.message ?: "Unknown error"
         }
@@ -221,7 +221,7 @@ Overall rating:
                 }
             metrics["answer_quality"] = scores.average()
             detailed["answer_quality"] = scores
-        } catch (ex: RuntimeException) {
+        } catch (ex: Exception) {
             logger.error(ex) { "Error in LLM evaluation" }
             errors["llm_evaluation"] = ex.message ?: "Unknown error"
         }

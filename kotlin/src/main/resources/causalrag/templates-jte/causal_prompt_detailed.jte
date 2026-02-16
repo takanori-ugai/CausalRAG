@@ -37,4 +37,4 @@ Context passages:
 
 Question: ${query}
 
-Answer (explain the causal relationships that lead to your conclusion):
+Answer: Provide only answer, no extra information.

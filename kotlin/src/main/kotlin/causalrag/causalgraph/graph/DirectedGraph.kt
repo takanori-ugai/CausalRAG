@@ -127,11 +127,11 @@ class DirectedGraph {
             path: MutableList<String>,
             visited: MutableSet<String>,
         ) {
-            if (depth >= maxDepth || results.size >= limit) return
             if (current == target) {
                 results.add(path.toList())
                 return
             }
+            if (depth >= maxDepth || results.size >= limit) return
             for (next in successors(current)) {
                 if (next in visited) continue
                 visited.add(next)

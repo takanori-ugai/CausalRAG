@@ -174,13 +174,13 @@ Write a concise explanation using simple natural language that maintains all the
         val builder = StringBuilder()
         builder.append(
             """
-            You are a causal reasoning assistant. Answer the following question using:
-1. The provided context passages
-2. The causal relationships between concepts
-3. Your understanding of how causes lead to effects
-
-Ensure your answer reflects the causal mechanisms described in the context.
-            """.trimIndent(),
+            |You are a causal reasoning assistant. Answer the following question using:
+            |1. The provided context passages
+            |2. The causal relationships between concepts
+            |3. Your understanding of how causes lead to effects
+            |
+            |Ensure your answer reflects the causal mechanisms described in the context.
+            """.trimMargin(),
         )
         if (!causalNodes.isNullOrEmpty()) {
             builder.append("\nCausal concepts: ").append(causalNodes.joinToString(", ")).append("\n")
@@ -232,14 +232,14 @@ Ensure your answer reflects the causal mechanisms described in the context.
         val builder = StringBuilder()
         builder.append(
             """
-            You are a causal reasoning assistant that explains complex relationships between concepts.
-For the following question, provide a structured answer that:
-1. Identifies the key causal factors involved
-2. Explains how these factors relate through causal mechanisms
-3. Provides a final answer that follows from this causal chain
-
-Use the provided context passages and causal relationship information.
-            """.trimIndent(),
+            |You are a causal reasoning assistant that explains complex relationships between concepts.
+            |For the following question, provide a structured answer that:
+            |1. Identifies the key causal factors involved
+            |2. Explains how these factors relate through causal mechanisms
+            |3. Provides a final answer that follows from this causal chain
+            |
+            |Use the provided context passages and causal relationship information.
+            """.trimMargin(),
         )
         if (!causalNodes.isNullOrEmpty()) {
             builder.append("\nCausal concepts: ").append(causalNodes.joinToString(", ")).append("\n")
@@ -298,19 +298,19 @@ Your structured causal answer:
         val builder = StringBuilder()
         builder.append(
             """
-            You are an expert in causal reasoning who answers complex questions by tracing causal mechanisms.
-For the question below, think step-by-step through the causal chains involved:
-
-1. First identify all key concepts from the question
-2. For each causal relationship relevant to these concepts:
-   - Examine what causes what
-   - Consider the strength and direction of the relationship
-   - Look for mediators and moderators of the relationship
-3. Then trace through the most plausible causal paths
-4. Finally, synthesize these relationships into a cohesive explanation
-
-Reference only information from the provided context and causal relationships.
-            """.trimIndent(),
+            |You are an expert in causal reasoning who answers complex questions by tracing causal mechanisms.
+            |For the question below, think step-by-step through the causal chains involved:
+            |
+            |1. First identify all key concepts from the question
+            |2. For each causal relationship relevant to these concepts:
+            |   - Examine what causes what
+            |   - Consider the strength and direction of the relationship
+            |   - Look for mediators and moderators of the relationship
+            |3. Then trace through the most plausible causal paths
+            |4. Finally, synthesize these relationships into a cohesive explanation
+            |
+            |Reference only information from the provided context and causal relationships.
+            """.trimMargin(),
         )
         if (!causalNodes.isNullOrEmpty()) {
             builder.append("\nCausal concepts: ").append(causalNodes.joinToString(", ")).append("\n")
@@ -375,13 +375,14 @@ STEP-BY-STEP REASONING:
         if (fromDir != null) return fromDir
 
         val classLoader = javaClass.classLoader
-        val primaryResource = classLoader.getResourceAsStream("causalrag/templates/$filename")
-        val fallbackResource = classLoader.getResourceAsStream("causalrag/templates/$fallback")
-        return when {
-            primaryResource != null -> primaryResource.bufferedReader().use { it.readText() }
-            fallbackResource != null -> fallbackResource.bufferedReader().use { it.readText() }
-            else -> null
-        }
+        return classLoader
+            .getResourceAsStream("causalrag/templates/$filename")
+            ?.bufferedReader()
+            ?.use { it.readText() }
+            ?: classLoader
+                .getResourceAsStream("causalrag/templates/$fallback")
+                ?.bufferedReader()
+                ?.use { it.readText() }
     }
 }
 

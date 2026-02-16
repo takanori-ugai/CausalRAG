@@ -5,6 +5,7 @@ import causalrag.evaluation.CausalEvaluator
 import causalrag.evaluation.EvalExample
 import causalrag.evaluation.EvaluationResult
 import causalrag.generator.llm.LLMInterface
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -14,6 +15,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 object CliUtils {
+    private val logger = KotlinLogging.logger {}
+
     data class EvalRunConfig(
         val evalDataPath: String,
         val outputDir: String,
@@ -38,7 +41,7 @@ object CliUtils {
             if (arg.startsWith("-")) {
                 val key = arg.trimStart('-')
                 val value = args.getOrNull(i + 1)
-                if (value != null && !value.startsWith("-")) {
+                if (value != null && (!value.startsWith("-") || isNegativeNumber(value))) {
                     options[key] = value
                     i += 2
                 } else {
@@ -52,18 +55,24 @@ object CliUtils {
         return options
     }
 
+    private fun isNegativeNumber(value: String): Boolean =
+        value.startsWith("-") &&
+            value.matches(Regex("^-?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$"))
+
     fun loadEvaluationData(filepath: String): List<EvalExample> {
         val json = Json { ignoreUnknownKeys = true }
         val text =
             try {
                 Files.readString(Path.of(filepath))
             } catch (ex: java.io.IOException) {
+                logger.warn(ex) { "Failed to read evaluation data from $filepath" }
                 return emptyList()
             }
         val root =
             try {
                 json.parseToJsonElement(text)
             } catch (ex: SerializationException) {
+                logger.warn(ex) { "Failed to parse evaluation data from $filepath" }
                 return emptyList()
             }
         if (root !is JsonArray) return emptyList()
