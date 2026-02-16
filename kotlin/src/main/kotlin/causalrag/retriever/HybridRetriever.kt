@@ -2,6 +2,7 @@ package causalrag.retriever
 
 import causalrag.causalgraph.retriever.CausalPathRetriever
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
 
 private val logger = KotlinLogging.logger {}
 
@@ -17,13 +18,11 @@ class HybridRetriever(
     private val minCausalMatches: Int = 1,
     private val cacheResults: Boolean = true,
 ) {
-    private val queryCache = mutableMapOf<String, List<Map<String, Any>>>()
-    private var lastQuery: String? = null
-    private var lastResults: List<Map<String, Any>>? = null
+    private val queryCache: MutableMap<String, List<Map<String, Any>>> = ConcurrentHashMap()
 
     init {
         val total = semanticWeight + causalWeight + bm25Weight
-        if (total != 1.0) {
+        if (kotlin.math.abs(total - 1.0) > 1e-9) {
             semanticWeight /= total
             causalWeight /= total
             if (bm25Weight > 0.0) {
@@ -32,7 +31,7 @@ class HybridRetriever(
         }
     }
 
-    fun scorePassage(
+    private fun scorePassage(
         passage: String,
         pathNodes: List<String>,
         causalPaths: List<List<String>>,
@@ -81,19 +80,26 @@ class HybridRetriever(
     fun retrieve(
         query: String,
         topK: Int = 5,
-        includeScores: Boolean = false,
-        includeDetails: Boolean = false,
-    ): List<Any> {
+    ): List<String> = retrieveWithDetails(query, topK).map { it["passage"] as String }
+
+    fun retrieveWithScores(
+        query: String,
+        topK: Int = 5,
+    ): List<Pair<String, Double>> = retrieveWithDetails(query, topK).map { it["passage"] as String to (it["score"] as Double) }
+
+    fun retrieveWithDetails(
+        query: String,
+        topK: Int = 5,
+    ): List<Map<String, Any>> {
         if (cacheResults && queryCache.containsKey(query)) {
             val cached = queryCache[query] ?: emptyList()
-            return formatResults(cached.take(topK), includeScores, includeDetails)
+            return cached.take(topK)
         }
 
         val expandedK = topK * rerankingFactor
         val semanticResults =
             try {
-                @Suppress("UNCHECKED_CAST")
-                vectorRetriever.search(query, topK = expandedK, includeScores = true) as List<Pair<String, Double>>
+                vectorRetriever.searchWithScores(query, topK = expandedK)
             } catch (ex: RuntimeException) {
                 logger.error(ex) { "Error retrieving vector results" }
                 emptyList()
@@ -116,9 +122,9 @@ class HybridRetriever(
                 emptyMap()
             }
 
-        if (semanticResults.isEmpty() && cacheResults && lastResults != null) {
-            val cached = lastResults ?: emptyList()
-            return if (includeDetails) cached.take(topK) else formatResults(cached.take(topK), includeScores, false)
+        if (semanticResults.isEmpty()) {
+            logger.warn { "No semantic results found for query" }
+            return emptyList()
         }
 
         val pathNodes =
@@ -156,61 +162,47 @@ class HybridRetriever(
         val sorted = scoredResults.sortedByDescending { it["score"] as Double }
         if (cacheResults) {
             queryCache[query] = sorted
-            lastQuery = query
-            lastResults = sorted
         }
-        return formatResults(sorted.take(topK), includeScores, includeDetails)
+        return sorted.take(topK)
     }
-
-    private fun formatResults(
-        results: List<Map<String, Any>>,
-        includeScores: Boolean,
-        includeDetails: Boolean,
-    ): List<Any> =
-        when {
-            includeDetails -> results
-            includeScores -> results.map { it["passage"] as String to (it["score"] as Double) }
-            else -> results.map { it["passage"] as String }
-        }
 
     fun getExplanation(
         query: String,
         passage: String,
     ): String {
-        if (lastQuery == query && lastResults != null) {
-            val result = lastResults?.firstOrNull { it["passage"] == passage }
-            if (result != null) {
-                val details = result["details"] as Map<*, *>
-                val explanation = mutableListOf("Hybrid retrieval explanation for: $query")
-                val semanticScore = details["semantic_score"] as? Double ?: 0.0
-                val causalScore = details["causal_score"] as? Double ?: 0.0
-                val combinedScore = details["combined_score"] as? Double ?: 0.0
-                val bm25Score = details["bm25_score"] as? Double ?: 0.0
-                explanation.add("\nSemantic relevance score: ${"%.2f".format(semanticScore)} (weight: ${"%.2f".format(semanticWeight)})")
-                explanation.add("\nCausal relevance score: ${"%.2f".format(causalScore)} (weight: ${"%.2f".format(causalWeight)})")
-                if (bm25Weight > 0.0) {
-                    explanation.add("\nBM25 relevance score: ${"%.2f".format(bm25Score)} (weight: ${"%.2f".format(bm25Weight)})")
-                }
-                val matchedNodes = details["matched_nodes"] as? List<*> ?: emptyList<Any>()
-                if (matchedNodes.isNotEmpty()) {
-                    explanation.add("\nMatched causal concepts (${matchedNodes.size} concepts):")
-                    matchedNodes.forEach { explanation.add("- $it") }
-                }
-                val pathMatches = details["path_matches"] as? List<*> ?: emptyList<Any>()
-                if (pathMatches.isNotEmpty()) {
-                    explanation.add("\nPreserved causal relationships:")
-                    pathMatches.forEach { explanation.add("- $it") }
-                }
-                explanation.add("\nOverall score: ${"%.2f".format(combinedScore)}")
-                return explanation.joinToString("\n")
-            }
+        val fallbackMessage =
+            "This passage was retrieved as relevant to the query: $query. " +
+                "No detailed scoring information is available."
+        val cached = queryCache[query] ?: return fallbackMessage
+        val result =
+            cached.firstOrNull { it["passage"] == passage }
+                ?: return fallbackMessage
+        val details = result["details"] as Map<*, *>
+        val explanation = mutableListOf("Hybrid retrieval explanation for: $query")
+        val semanticScore = details["semantic_score"] as? Double ?: 0.0
+        val causalScore = details["causal_score"] as? Double ?: 0.0
+        val combinedScore = details["combined_score"] as? Double ?: 0.0
+        val bm25Score = details["bm25_score"] as? Double ?: 0.0
+        explanation.add("\nSemantic relevance score: ${"%.2f".format(semanticScore)} (weight: ${"%.2f".format(semanticWeight)})")
+        explanation.add("\nCausal relevance score: ${"%.2f".format(causalScore)} (weight: ${"%.2f".format(causalWeight)})")
+        if (bm25Weight > 0.0) {
+            explanation.add("\nBM25 relevance score: ${"%.2f".format(bm25Score)} (weight: ${"%.2f".format(bm25Weight)})")
         }
-        return "This passage was retrieved as relevant to the query: $query. No detailed scoring information is available."
+        val matchedNodes = details["matched_nodes"] as? List<*> ?: emptyList<Any>()
+        if (matchedNodes.isNotEmpty()) {
+            explanation.add("\nMatched causal concepts (${matchedNodes.size} concepts):")
+            matchedNodes.forEach { explanation.add("- $it") }
+        }
+        val pathMatches = details["path_matches"] as? List<*> ?: emptyList<Any>()
+        if (pathMatches.isNotEmpty()) {
+            explanation.add("\nPreserved causal relationships:")
+            pathMatches.forEach { explanation.add("- $it") }
+        }
+        explanation.add("\nOverall score: ${"%.2f".format(combinedScore)}")
+        return explanation.joinToString("\n")
     }
 
     fun clearCache() {
         queryCache.clear()
-        lastQuery = null
-        lastResults = null
     }
 }

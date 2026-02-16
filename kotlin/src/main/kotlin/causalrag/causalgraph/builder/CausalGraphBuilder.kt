@@ -70,26 +70,33 @@ class CausalTripleExtractor(
             "with",
         )
 
+    private data class CausalPattern(
+        val regex: Regex,
+        val reversed: Boolean = false,
+    )
+
     private val causalPatterns =
         listOf(
-            Regex("([\\w\\s]+?)\\s+causes\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+leads to\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+results in\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("because of\\s+([\\w\\s]+?),\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+is caused by\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("if\\s+([\\w\\s]+?),\\s+then\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+contributes to\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+influences\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+leads\\s+to\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+triggers\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+induces\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
-            Regex("([\\w\\s]+?)\\s+drives\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+causes\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+results in\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("because of\\s+([\\w\\s]+?),\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(
+                Regex("([\\w\\s]+?)\\s+is caused by\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE),
+                reversed = true,
+            ),
+            CausalPattern(Regex("if\\s+([\\w\\s]+?),\\s+then\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+contributes to\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+influences\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+leads\\s+to\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+triggers\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+induces\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
+            CausalPattern(Regex("([\\w\\s]+?)\\s+drives\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
         )
 
     fun extract(text: String): List<CausalTriple> =
         when (method) {
             "rule" -> {
-                ruleBasedExtraction(text)
+                deduplicateTriples(ruleBasedExtraction(text))
             }
 
             "llm" -> {
@@ -121,12 +128,22 @@ class CausalTripleExtractor(
         val sentences = cleanText.split(Regex("(?<!\\w\\.\\w.)(?<![A-Z][a-z]\\.)(?<=\\.|\\?|!)\\s"))
         for (sentence in sentences) {
             for (pattern in causalPatterns) {
-                val matches = pattern.findAll(sentence)
+                val matches = pattern.regex.findAll(sentence)
                 for (match in matches) {
                     val groups = match.groupValues
                     if (groups.size >= 3) {
-                        val cause = normalizeCandidate(groups[1])
-                        val effect = normalizeCandidate(groups[2])
+                        val cause =
+                            if (pattern.reversed) {
+                                normalizeCandidate(groups[2])
+                            } else {
+                                normalizeCandidate(groups[1])
+                            }
+                        val effect =
+                            if (pattern.reversed) {
+                                normalizeCandidate(groups[1])
+                            } else {
+                                normalizeCandidate(groups[2])
+                            }
                         if (isValidNodeText(cause) && isValidNodeText(effect)) {
                             var conf = 0.8
                             if (cause.length < 5 || effect.length < 5) {
@@ -256,7 +273,12 @@ CAUSAL RELATIONSHIPS:"""
 
     private fun fixJsonErrors(jsonStr: String): String {
         var fixed = jsonStr
-        fixed = fixed.replace(Regex("'([^']*)'"), "\"$1\"")
+        // Convert single-quoted keys/values without touching apostrophes inside text.
+        fixed =
+            fixed
+                .replace(Regex("'([^']*)'\\s*:"), "\"$1\":")
+                .replace(Regex(":\\s*'([^']*)'(?=\\s*[},\\]])"), ": \"$1\"")
+                .replace(Regex("\\[\\s*'([^']*)'(?=\\s*[,\\]])"), "[\"$1\"")
         fixed = fixed.replace(Regex(",\\s*]"), "]")
         fixed = fixed.replace(Regex("}\\s*\\{"), "},{")
         fixed = fixed.replace(Regex("([{,]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)\\s*:"), "$1\"$2\":")
@@ -319,7 +341,7 @@ CAUSAL RELATIONSHIPS:"""
         val tokens = text.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
         if (tokens.isEmpty()) return false
         if (tokens.size == 1 && stopwords.contains(tokens[0])) return false
-        if (stopwords.contains(tokens.first())) return false
+        if (tokens.all { stopwords.contains(it) }) return false
         return true
     }
 
@@ -382,11 +404,13 @@ class CausalGraphBuilder(
     embeddingApiKey: String? = null,
 ) {
     private val graph = DirectedGraph()
-    val nodeText: MutableMap<String, String> = mutableMapOf()
+    private val _nodeText: MutableMap<String, String> = mutableMapOf()
+    val nodeText: Map<String, String> get() = _nodeText
     private val nodeVariants: MutableMap<String, MutableList<String>> = mutableMapOf()
-    val encoder: EmbeddingModel? =
+    private val encoder: EmbeddingModel? =
         embeddingModel ?: EmbeddingModelFactory.createDefault(modelName, embeddingApiKey)
-    val nodeEmbeddings: MutableMap<String, DoubleArray> = mutableMapOf()
+    private val _nodeEmbeddings: MutableMap<String, DoubleArray> = mutableMapOf()
+    val nodeEmbeddings: Map<String, DoubleArray> get() = _nodeEmbeddings
     private val extractor = CausalTripleExtractor(method = extractorMethod, llmInterface = llmInterface)
 
     init {
@@ -407,15 +431,15 @@ class CausalGraphBuilder(
             } else {
                 causeId = triple.cause
                 effectId = triple.effect
-                nodeText[causeId] = triple.cause
-                nodeText[effectId] = triple.effect
+                _nodeText[causeId] = triple.cause
+                _nodeText[effectId] = triple.effect
             }
             graph.addEdge(causeId, effectId, confidence)
             if (encoder != null) {
                 for (nodeId in listOf(causeId, effectId)) {
-                    if (!nodeEmbeddings.containsKey(nodeId)) {
-                        val text = nodeText[nodeId] ?: nodeId
-                        nodeEmbeddings[nodeId] = encoder.encode(text)
+                    if (!_nodeEmbeddings.containsKey(nodeId)) {
+                        val text = _nodeText[nodeId] ?: nodeId
+                        _nodeEmbeddings[nodeId] = encoder.encode(text)
                     }
                 }
             }
@@ -427,7 +451,7 @@ class CausalGraphBuilder(
         val textEmb = encoder.encode(text)
         var bestMatch: String? = null
         var bestScore = 0.0
-        for ((nodeId, emb) in nodeEmbeddings) {
+        for ((nodeId, emb) in _nodeEmbeddings) {
             val score = cosineSimilarity(textEmb, emb)
             if (score > 0.85 && score > bestScore) {
                 bestMatch = nodeId
@@ -438,8 +462,8 @@ class CausalGraphBuilder(
             nodeVariants.getOrPut(bestMatch) { mutableListOf() }.add(text)
             return bestMatch
         }
-        nodeText[text] = text
-        nodeEmbeddings[text] = textEmb
+        _nodeText[text] = text
+        _nodeEmbeddings[text] = textEmb
         return text
     }
 
@@ -476,16 +500,18 @@ class CausalGraphBuilder(
 
     fun getNodeVariants(nodeId: String): List<String> {
         val variants = nodeVariants[nodeId] ?: emptyList()
-        return listOfNotNull(nodeText[nodeId]) + variants
+        return listOfNotNull(_nodeText[nodeId]) + variants
     }
 
-    fun getEmbedding(nodeId: String): DoubleArray? = nodeEmbeddings[nodeId]
+    fun getEmbedding(nodeId: String): DoubleArray? = _nodeEmbeddings[nodeId]
+
+    fun getEncoder(): EmbeddingModel? = encoder
 
     fun describeGraph(): String {
         if (graph.numberOfEdges() == 0) return "Empty causal graph (no causal relationships found)"
         return graph.edges().joinToString("\n") { edge ->
-            val aText = nodeText[edge.from] ?: edge.from
-            val bText = nodeText[edge.to] ?: edge.to
+            val aText = _nodeText[edge.from] ?: edge.from
+            val bText = _nodeText[edge.to] ?: edge.to
             "$aText -> $bText (confidence: ${"%.2f".format(edge.weight)})"
         }
     }
@@ -494,7 +520,7 @@ class CausalGraphBuilder(
         val json = Json { prettyPrint = true }
         val nodeJson =
             buildJsonObject {
-                for ((k, v) in nodeText) {
+                for ((k, v) in _nodeText) {
                     put(k, v)
                 }
             }
@@ -506,25 +532,33 @@ class CausalGraphBuilder(
                     }
                 }
             }
-        val edgesJson =
-            buildJsonObject {
-                putJsonArray("edges") {
-                    for (edge in graph.edges()) {
-                        add(
-                            buildJsonObject {
-                                put("from", edge.from)
-                                put("to", edge.to)
-                                put("weight", edge.weight)
-                            },
-                        )
+        val edgesJsonArray =
+            JsonArray(
+                graph.edges().map { edge ->
+                    buildJsonObject {
+                        put("from", edge.from)
+                        put("to", edge.to)
+                        put("weight", edge.weight)
                     }
-                }
-            }
+                },
+            )
         val root =
             buildJsonObject {
                 put("nodes", nodeJson)
                 put("variants", variantsJson)
-                put("edges", edgesJson["edges"] ?: JsonArray(emptyList()))
+                put("edges", edgesJsonArray)
+                if (_nodeEmbeddings.isNotEmpty()) {
+                    put(
+                        "embeddings",
+                        buildJsonObject {
+                            for ((nodeId, emb) in _nodeEmbeddings) {
+                                putJsonArray(nodeId) {
+                                    emb.forEach { add(JsonPrimitive(it)) }
+                                }
+                            }
+                        },
+                    )
+                }
             }
         Files.writeString(Path.of(filepath), json.encodeToString(JsonElement.serializer(), root))
     }
@@ -541,14 +575,15 @@ class CausalGraphBuilder(
             val nodesObj = root["nodes"] as? JsonObject ?: JsonObject(emptyMap())
             val variantsObj = root["variants"] as? JsonObject ?: JsonObject(emptyMap())
             val edgesArray = root["edges"] as? JsonArray ?: JsonArray(emptyList())
+            val embeddingsObj = root["embeddings"] as? JsonObject
 
             graph.clear()
-            nodeText.clear()
+            _nodeText.clear()
             nodeVariants.clear()
-            nodeEmbeddings.clear()
+            _nodeEmbeddings.clear()
 
             for ((k, v) in nodesObj) {
-                nodeText[k] = (v as? JsonPrimitive)?.content ?: k
+                _nodeText[k] = (v as? JsonPrimitive)?.content ?: k
             }
             for ((k, v) in variantsObj) {
                 val list = mutableListOf<String>()
@@ -568,9 +603,22 @@ class CausalGraphBuilder(
                 graph.addEdge(from, to, weight)
             }
 
-            if (encoder != null) {
-                for ((nodeId, text) in nodeText) {
-                    nodeEmbeddings[nodeId] = encoder.encode(text)
+            if (embeddingsObj != null) {
+                for ((nodeId, value) in embeddingsObj) {
+                    val arr = value as? JsonArray ?: continue
+                    val vector =
+                        arr
+                            .mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull() }
+                            .toDoubleArray()
+                    if (vector.isNotEmpty()) {
+                        _nodeEmbeddings[nodeId] = vector
+                    }
+                }
+            }
+
+            if (_nodeEmbeddings.isEmpty() && encoder != null) {
+                for ((nodeId, text) in _nodeText) {
+                    _nodeEmbeddings[nodeId] = encoder.encode(text)
                 }
             }
             true
@@ -594,8 +642,8 @@ class CausalGraphBuilder(
         val topRelationships =
             edgeConfidences.take(10).map { edge ->
                 mapOf(
-                    "cause" to (nodeText[edge.from] ?: edge.from),
-                    "effect" to (nodeText[edge.to] ?: edge.to),
+                    "cause" to (_nodeText[edge.from] ?: edge.from),
+                    "effect" to (_nodeText[edge.to] ?: edge.to),
                     "confidence" to edge.weight,
                 )
             }
@@ -610,7 +658,7 @@ class CausalGraphBuilder(
         val centralConcepts =
             centralNodes.take(10).map { (node, degree) ->
                 mapOf(
-                    "concept" to (nodeText[node] ?: node),
+                    "concept" to (_nodeText[node] ?: node),
                     "connections" to degree,
                     "in_degree" to graph.inDegree(node),
                     "out_degree" to graph.outDegree(node),
@@ -661,14 +709,9 @@ class CausalGraphBuilder(
         var graphToViz: DirectedGraph = graph
         if (graph.numberOfNodes() > maxNodes) {
             val nodeImportance = mutableMapOf<String, Double>()
-            for (node in graph.nodes()) {
-                var totalWeight = 0.0
-                for (edge in graph.edges()) {
-                    if (edge.from == node || edge.to == node) {
-                        totalWeight += edge.weight
-                    }
-                }
-                nodeImportance[node] = totalWeight
+            for (edge in graph.edges()) {
+                nodeImportance[edge.from] = (nodeImportance[edge.from] ?: 0.0) + edge.weight
+                nodeImportance[edge.to] = (nodeImportance[edge.to] ?: 0.0) + edge.weight
             }
             val importantNodes =
                 nodeImportance.entries
@@ -688,7 +731,7 @@ class CausalGraphBuilder(
                 filteredGraph.nodes().map { node ->
                     buildJsonObject {
                         put("id", node)
-                        put("label", nodeText[node] ?: node)
+                        put("label", _nodeText[node] ?: node)
                         put("in_degree", filteredGraph.inDegree(node))
                         put("out_degree", filteredGraph.outDegree(node))
                         put("highlighted", highlightNodes?.contains(node) ?: false)

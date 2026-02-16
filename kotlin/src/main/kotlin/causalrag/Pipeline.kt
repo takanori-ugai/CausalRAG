@@ -30,6 +30,12 @@ data class PipelineConfig(
     val templateStyle: String? = null,
 )
 
+data class PipelineRunResult(
+    val answer: String,
+    val context: List<String>,
+    val causalPaths: List<List<String>>,
+)
+
 /**
  * Top-level orchestration of the CausalRAG pipeline.
  */
@@ -53,14 +59,14 @@ class CausalRAGPipeline(
     private val effectiveTemplateStyle = config?.templateStyle ?: "detailed"
 
     // Core components
-    val llm: LLMInterface =
+    internal val llm: LLMInterface =
         LLMInterface(
             modelName = effectiveModelName,
             provider = effectiveLlmProvider,
             apiKey = effectiveLlmApiKey,
             baseUrl = effectiveLlmBaseUrl,
         )
-    val graphBuilder: CausalGraphBuilder =
+    internal val graphBuilder: CausalGraphBuilder =
         CausalGraphBuilder(
             modelName = effectiveEmbeddingModel,
             graphPath = effectiveGraphPath,
@@ -68,15 +74,15 @@ class CausalRAGPipeline(
             extractorMethod = "hybrid",
             llmInterface = llm,
         )
-    val vectorRetriever: VectorStoreRetriever =
+    internal val vectorRetriever: VectorStoreRetriever =
         VectorStoreRetriever(
             embeddingModel = effectiveEmbeddingModel,
             indexPath = effectiveIndexPath,
             embeddingApiKey = effectiveEmbeddingApiKey,
         )
-    val bm25Retriever: Bm25Retriever = Bm25Retriever()
-    val graphRetriever: CausalPathRetriever = CausalPathRetriever(graphBuilder)
-    val hybridRetriever: HybridRetriever =
+    internal val bm25Retriever: Bm25Retriever = Bm25Retriever()
+    internal val graphRetriever: CausalPathRetriever = CausalPathRetriever(graphBuilder)
+    internal val hybridRetriever: HybridRetriever =
         HybridRetriever(
             vectorRetriever,
             graphRetriever,
@@ -85,7 +91,7 @@ class CausalRAGPipeline(
             bm25Weight = 0.1,
             bm25Retriever = bm25Retriever,
         )
-    val reranker: CausalPathReranker = CausalPathReranker(graphRetriever)
+    internal val reranker: CausalPathReranker = CausalPathReranker(graphRetriever)
 
     /** Load configuration from file. */
     private fun loadConfig(configPath: String): PipelineConfig {
@@ -133,6 +139,14 @@ class CausalRAGPipeline(
             val path = Path.of(dir)
             val graphLoaded = graphBuilder.load(path.resolve("graph.json").toString())
             val vectorsLoaded = vectorRetriever.loadIndex(path.resolve("vector_cache").toString())
+            if (vectorsLoaded) {
+                val passages = vectorRetriever.getPassages()
+                if (passages.isNotEmpty()) {
+                    bm25Retriever.indexDocuments(passages)
+                } else {
+                    logger.warn { "Vector index loaded but no passages found to rebuild BM25 index." }
+                }
+            }
             graphLoaded && vectorsLoaded
         } catch (ex: IOException) {
             logger.error(ex) { "Failed to load pipeline data from $dir" }
@@ -146,25 +160,42 @@ class CausalRAGPipeline(
     fun run(
         query: String,
         topK: Int = 5,
-    ): String {
+    ): String = runWithContext(query, topK = topK).answer
+
+    fun runWithContext(
+        query: String,
+        topK: Int = 5,
+    ): PipelineRunResult {
         // Step 1: Hybrid retrieval
-        val candidates = hybridRetriever.retrieve(query, topK = topK).map { it as String }
+        val candidates = hybridRetriever.retrieve(query, topK = topK)
 
         // Step 2: Rerank via causal path
         val reranked = reranker.rerank(query, candidates)
-        val rerankedPassages = reranked.map { it.first }
+        val rerankedPassages = reranked.map { it.first }.take(topK)
 
         // Step 3: Build prompt with causal context
         val causalNodes = graphRetriever.retrievePathNodes(query)
+        val causalPaths = graphRetriever.retrievePaths(query, maxPaths = 3)
         val prompt =
             buildPrompt(
                 query,
-                rerankedPassages.take(topK),
+                rerankedPassages,
                 causalNodes = causalNodes,
                 templateStyle = effectiveTemplateStyle,
             )
 
         // Step 4: Generate answer
-        return llm.generate(prompt)
+        val answer = llm.generate(prompt)
+        return PipelineRunResult(answer, rerankedPassages, causalPaths)
     }
+
+    fun retrieveContext(
+        query: String,
+        topK: Int = 5,
+    ): List<String> = hybridRetriever.retrieve(query, topK = topK)
+
+    fun retrieveCausalPaths(
+        query: String,
+        maxPaths: Int = 3,
+    ): List<List<String>> = graphRetriever.retrievePaths(query, maxPaths = maxPaths)
 }

@@ -19,7 +19,7 @@ class Bm25Retriever(
 
     private fun tokenizeInternal(text: String): List<String> = Regex("\\w+").findAll(text.lowercase()).map { it.value }.toList()
 
-    fun indexDocuments(texts: List<String>) {
+    internal fun indexDocuments(texts: List<String>) {
         passages = texts
         numDocs = texts.size
         docFreqs.clear()

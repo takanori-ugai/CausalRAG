@@ -26,13 +26,17 @@ abstract class BaseRetriever(
 abstract class EmbeddingRetriever(
     name: String = "EmbeddingRetriever",
 ) : BaseRetriever(name) {
-    abstract fun encodeQuery(query: String): Any
+    abstract fun encodeQuery(query: String): DoubleArray
 
-    abstract fun encodeDocuments(documents: List<String>): List<Any>
+    abstract fun encodeDocuments(documents: List<String>): List<DoubleArray>
 }
 
 abstract class KeywordRetriever(
     name: String = "KeywordRetriever",
 ) : BaseRetriever(name) {
-    open fun tokenize(text: String): List<String> = text.lowercase().split(Regex("\\s+"))
+    open fun tokenize(text: String): List<String> = text.lowercase().split(WHITESPACE_REGEX)
+
+    companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
+    }
 }

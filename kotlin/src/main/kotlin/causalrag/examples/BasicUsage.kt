@@ -37,14 +37,15 @@ fun main() {
         println("Query: $query")
         println("=".repeat(80))
 
-        val context = pipeline.hybridRetriever.retrieve(query, topK = 3).map { it as String }
+        val context = pipeline.retrieveContext(query, topK = 3)
         val causalNodes = pipeline.graphRetriever.retrievePathNodes(query)
-        val prompt = causalrag.generator.promptbuilder.buildPrompt(
-            query = query,
-            passages = context,
-            causalNodes = causalNodes,
-            templateStyle = "detailed",
-        )
+        val prompt =
+            causalrag.generator.promptbuilder.buildPrompt(
+                query = query,
+                passages = context,
+                causalNodes = causalNodes,
+                templateStyle = "detailed",
+            )
         println("\nPrompt:\n$prompt")
 
         val answer = pipeline.llm.generate(prompt)
@@ -56,7 +57,7 @@ fun main() {
             println("[${idx + 1}] $preview")
         }
 
-        val causalPaths = pipeline.graphRetriever.retrievePaths(query, maxPaths = 3)
+        val causalPaths = pipeline.retrieveCausalPaths(query, maxPaths = 3)
         if (causalPaths.isNotEmpty()) {
             println("\nRelevant causal pathways:")
             causalPaths.forEach { path ->

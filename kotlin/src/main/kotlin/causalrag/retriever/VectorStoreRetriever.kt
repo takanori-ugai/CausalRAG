@@ -99,6 +99,15 @@ class VectorStoreRetriever(
             passages.addAll(texts)
             this.metadata.clear()
             this.metadata.addAll(normalizedMetadata)
+        } else if (passages.size != texts.size) {
+            logger.warn {
+                "storeOriginal=false but passage count (${passages.size}) != texts (${texts.size}); " +
+                    "updating passages to keep vectors aligned."
+            }
+            passages.clear()
+            passages.addAll(texts)
+            this.metadata.clear()
+            this.metadata.addAll(normalizedMetadata)
         }
 
         vectors.clear()
@@ -119,8 +128,25 @@ class VectorStoreRetriever(
         query: String,
         topK: Int = 5,
         threshold: Double? = null,
-        includeScores: Boolean = false,
-    ): List<Any> {
+    ): List<String> = searchIndexed(query, topK, threshold).map { it.passage }
+
+    fun searchWithScores(
+        query: String,
+        topK: Int = 5,
+        threshold: Double? = null,
+    ): List<Pair<String, Double>> = searchIndexed(query, topK, threshold).map { it.passage to it.score }
+
+    private data class SearchHit(
+        val index: Int,
+        val passage: String,
+        val score: Double,
+    )
+
+    private fun searchIndexed(
+        query: String,
+        topK: Int,
+        threshold: Double?,
+    ): List<SearchHit> {
         if (encoder == null) {
             logger.error { "Encoder not initialized, cannot search" }
             return emptyList()
@@ -135,10 +161,8 @@ class VectorStoreRetriever(
             }
         }
         val ranked = scores.sortedByDescending { it.second }.take(topK)
-        return if (includeScores) {
-            ranked.map { passages[it.first] to it.second }
-        } else {
-            ranked.map { passages[it.first] }
+        return ranked.map { (idx, score) ->
+            SearchHit(idx, passages[idx], score)
         }
     }
 
@@ -147,21 +171,16 @@ class VectorStoreRetriever(
         topK: Int = 5,
         threshold: Double? = null,
     ): List<Map<String, Any>> {
-        val results = search(query, topK, threshold, includeScores = true)
+        val results = searchIndexed(query, topK, threshold)
         val output = mutableListOf<Map<String, Any>>()
-        for ((idx, entry) in results.withIndex()) {
-            @Suppress("UNCHECKED_CAST")
-            val pair = entry as Pair<String, Double>
-            val passage = pair.first
-            val score = pair.second
-            val passageIdx = passages.indexOf(passage)
-            val meta = if (passageIdx in metadata.indices) metadata[passageIdx] else emptyMap()
+        for ((rank, entry) in results.withIndex()) {
+            val meta = if (entry.index in metadata.indices) metadata[entry.index] else emptyMap()
             output.add(
                 mapOf(
-                    "passage" to passage,
-                    "score" to score,
+                    "passage" to entry.passage,
+                    "score" to entry.score,
                     "metadata" to meta,
-                    "rank" to (idx + 1),
+                    "rank" to (rank + 1),
                 ),
             )
         }
@@ -263,11 +282,13 @@ class VectorStoreRetriever(
 
     fun loadIndex(dir: String): Boolean = loadCached(dir)
 
+    fun getPassages(): List<String> = passages.toList()
+
     private fun mapToJson(map: Map<String, Any>): JsonObject =
         buildJsonObject {
             for ((k, v) in map) {
                 when (v) {
-                    is Number -> put(k, v.toString().toDouble())
+                    is Number -> put(k, v.toDouble())
                     is Boolean -> put(k, v)
                     else -> put(k, v.toString())
                 }

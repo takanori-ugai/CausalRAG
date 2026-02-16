@@ -10,6 +10,7 @@ For the question below, think step-by-step through the causal chains involved:
 4. Finally, synthesize these relationships into a cohesive explanation
 
 Reference only information from the provided context and causal relationships.
+Note: path_summaries[0] is the key insight; path_summaries[1..] correspond to each causal path in order.
 
 {% if path_summaries and path_summaries|length > 0 %}
 KEY INSIGHT ABOUT THESE CAUSAL MECHANISMS: {{ path_summaries[0] }}

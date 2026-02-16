@@ -57,9 +57,11 @@ class DirectedGraph {
         to: String,
     ): Double? = outEdges[from]?.get(to)
 
-    fun maxEdgeWeight(): Double {
-        var best = 0.0
-        for (edge in edges()) {
+    fun maxEdgeWeight(): Double? {
+        val allEdges = edges()
+        if (allEdges.isEmpty()) return null
+        var best = allEdges.first().weight
+        for (edge in allEdges) {
             best = max(best, edge.weight)
         }
         return best
@@ -118,6 +120,40 @@ class DirectedGraph {
             components.add(component)
         }
         return components
+    }
+
+    fun findPaths(
+        start: String,
+        end: String,
+        maxDepth: Int,
+        limit: Int = Int.MAX_VALUE,
+    ): List<List<String>> {
+        val results = mutableListOf<List<String>>()
+
+        fun dfs(
+            current: String,
+            target: String,
+            depth: Int,
+            path: MutableList<String>,
+            visited: MutableSet<String>,
+        ) {
+            if (depth > maxDepth || results.size >= limit) return
+            if (current == target) {
+                results.add(path.toList())
+                return
+            }
+            for (next in successors(current)) {
+                if (next in visited) continue
+                visited.add(next)
+                path.add(next)
+                dfs(next, target, depth + 1, path, visited)
+                path.removeAt(path.size - 1)
+                visited.remove(next)
+                if (results.size >= limit) return
+            }
+        }
+        dfs(start, end, 0, mutableListOf(start), mutableSetOf(start))
+        return results
     }
 }
 

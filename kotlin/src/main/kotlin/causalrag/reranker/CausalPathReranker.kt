@@ -14,9 +14,6 @@ class CausalPathReranker(
     private val semanticMatchWeight: Double = 0.5,
     private val minNodeLength: Int = 3,
 ) : BaseReranker(name) {
-    private var lastQueryNodes: List<String> = emptyList()
-    private var lastQueryPaths: List<List<String>> = emptyList()
-
     override fun rerank(
         query: String,
         candidates: List<String>,
@@ -29,8 +26,6 @@ class CausalPathReranker(
         try {
             pathNodes = retriever.retrievePathNodes(query)
             causalPaths = retriever.retrievePaths(query, maxPaths = 3)
-            lastQueryNodes = pathNodes
-            lastQueryPaths = causalPaths
             if (pathNodes.isEmpty()) {
                 logger.warn { "No causal nodes found for query: $query" }
                 return candidates.map { it to 0.1 }
@@ -52,16 +47,12 @@ class CausalPathReranker(
             scoredCandidates.add(passage to finalScore)
         }
 
-        if (scoredCandidates.isNotEmpty()) {
-            val scores = scoredCandidates.map { it.second }
-            val maxScore = scores.maxOrNull() ?: 1.0
-            val minScore = scores.minOrNull() ?: 0.0
-            val range = maxOf(maxScore - minScore, 1e-5)
-            val normalized = scoredCandidates.map { it.first to ((it.second - minScore) / range) }
-            return normalized.sortedByDescending { it.second }
-        }
-
-        return scoredCandidates
+        val scores = scoredCandidates.map { it.second }
+        val maxScore = scores.maxOrNull() ?: 1.0
+        val minScore = scores.minOrNull() ?: 0.0
+        val range = maxOf(maxScore - minScore, 1e-5)
+        val normalized = scoredCandidates.map { it.first to ((it.second - minScore) / range) }
+        return normalized.sortedByDescending { it.second }
     }
 
     private fun calculateNodeOverlap(
@@ -70,13 +61,15 @@ class CausalPathReranker(
     ): Double {
         if (nodes.isEmpty()) return 0.0
         val passageLower = passage.lowercase()
+        val eligibleNodes = nodes.filter { it.length >= minNodeLength }
+        if (eligibleNodes.isEmpty()) return 0.0
         var matchCount = 0
-        for (node in nodes) {
-            if (node.length >= minNodeLength && passageLower.contains(node.lowercase())) {
+        for (node in eligibleNodes) {
+            if (passageLower.contains(node.lowercase())) {
                 matchCount += 1
             }
         }
-        return matchCount.toDouble() / nodes.size.toDouble()
+        return matchCount.toDouble() / eligibleNodes.size.toDouble()
     }
 
     private fun calculatePathStructure(
@@ -89,11 +82,12 @@ class CausalPathReranker(
         for (path in paths) {
             if (path.size < 2) continue
             var pairMatches = 0.0
-            val totalPairs = path.size - 1
-            for (i in 0 until totalPairs) {
+            var totalPairs = 0
+            for (i in 0 until path.size - 1) {
                 val cause = path[i].lowercase()
                 val effect = path[i + 1].lowercase()
                 if (cause.length < minNodeLength || effect.length < minNodeLength) continue
+                totalPairs += 1
                 if (passageLower.contains(cause) && passageLower.contains(effect)) {
                     val causePos = passageLower.indexOf(cause)
                     val effectPos = passageLower.indexOf(effect)
@@ -112,12 +106,13 @@ class CausalPathReranker(
         candidate: String,
         metadata: Map<String, Any>?,
     ): String {
+        val (pathNodes, causalPaths) = getQueryContext(query)
         val nodeMatches =
-            lastQueryNodes.filter { node ->
+            pathNodes.filter { node ->
                 node.length >= minNodeLength && candidate.lowercase().contains(node.lowercase())
             }
         val pathMatches = mutableListOf<String>()
-        for (path in lastQueryPaths) {
+        for (path in causalPaths) {
             if (path.size < 2) continue
             for (i in 0 until path.size - 1) {
                 val cause = path[i].lowercase()
@@ -135,7 +130,7 @@ class CausalPathReranker(
 
         val explanation = mutableListOf("Causal ranking explanation for passage:")
         if (nodeMatches.isNotEmpty()) {
-            explanation.add("\nMatched concepts (${nodeMatches.size}/${lastQueryNodes.size}):")
+            explanation.add("\nMatched concepts (${nodeMatches.size}/${pathNodes.size}):")
             nodeMatches.take(5).forEach { explanation.add("- $it") }
             if (nodeMatches.size > 5) {
                 explanation.add("- ... and ${nodeMatches.size - 5} more")
@@ -156,4 +151,14 @@ class CausalPathReranker(
 
         return explanation.joinToString("\n")
     }
+
+    private fun getQueryContext(query: String): Pair<List<String>, List<List<String>>> =
+        try {
+            val nodes = retriever.retrievePathNodes(query)
+            val paths = retriever.retrievePaths(query, maxPaths = 3)
+            nodes to paths
+        } catch (ex: RuntimeException) {
+            logger.error(ex) { "Error retrieving causal information for explanation" }
+            emptyList<String>() to emptyList()
+        }
 }

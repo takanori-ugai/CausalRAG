@@ -5,6 +5,7 @@ For the following question, provide a structured answer that:
 3. Provides a final answer that follows from this causal chain
 
 Use the provided context passages and causal relationship information.
+Note: path_summaries[0] is the overall summary; path_summaries[1..] correspond to each causal path in order.
 
 {% if path_summaries and path_summaries|length > 0 %}
 SUMMARY OF CAUSAL MECHANISMS: {{ path_summaries[0] }}
@@ -27,9 +28,13 @@ Causal graph structure: {{ causal_graph_summary }}
 Important: Use these causal pathways to structure your reasoning.
 
 Context passages:
+{% if passages %}
 {% for passage in passages %}
 [{{ loop.index }}] {{ passage }}
 {% endfor %}
+{% else %}
+No context passages available.
+{% endif %}
 
 Question: {{ query }}
 

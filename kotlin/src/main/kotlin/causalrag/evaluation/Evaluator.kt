@@ -5,11 +5,7 @@ import causalrag.generator.llm.LLMInterface
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -51,7 +47,7 @@ class CausalEvaluator(
         answers: List<String>,
         contexts: List<List<String>>,
         causalPaths: List<List<List<String>>>? = null,
-        groundTruths: List<String>? = null,
+        groundTruths: List<String?>? = null,
     ): EvaluationResult {
         require(questions.size == answers.size && questions.size == contexts.size) {
             "Number of questions, answers, and contexts must match"
@@ -72,7 +68,6 @@ class CausalEvaluator(
                 evaluateCausalReasoning(
                     questions,
                     answers,
-                    contexts,
                     causalPaths ?: List(questions.size) { emptyList() },
                 )
             allMetrics.putAll(causalResults.metrics)
@@ -102,10 +97,10 @@ class CausalEvaluator(
         return result
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private fun evaluateCausalReasoning(
         questions: List<String>,
         answers: List<String>,
-        contexts: List<List<String>>,
         causalPaths: List<List<List<String>>>,
     ): EvaluationResult {
         val metrics = mutableMapOf<String, Double>()
@@ -124,7 +119,8 @@ class CausalEvaluator(
                         if (paths.isEmpty()) return@map 1.0
                         val pathsText = paths.joinToString("\n") { it.joinToString(" -> ") }
                         val prompt =
-                            """Evaluate if the answer respects the causal relationships provided.
+                            """
+                            Evaluate if the answer respects the causal relationships provided.
 
 Question: ${questions[idx]}
 
@@ -136,7 +132,8 @@ ${answers[idx]}
 
 On a scale of 0-10, how well does the answer respect these causal relationships?
 Provide your rating as a number from 0-10, followed by a brief explanation.
-Rating:""".trimIndent()
+Rating:
+                            """.trimIndent()
                         val response = llmInterface.generate(prompt, temperature = 0.1)
                         parseScore(response)
                     }
@@ -152,7 +149,8 @@ Rating:""".trimIndent()
                         val factors = paths.flatten().toSet()
                         val factorsText = factors.joinToString("\n") { "- $it" }
                         val prompt =
-                            """Evaluate if the answer addresses all important causal factors.
+                            """
+                            Evaluate if the answer addresses all important causal factors.
 
 Question: ${questions[idx]}
 
@@ -164,7 +162,8 @@ ${answers[idx]}
 
 On a scale of 0-10, how completely does the answer address these important causal factors?
 Provide your rating as a number from 0-10, followed by a brief explanation.
-Rating:""".trimIndent()
+Rating:
+                            """.trimIndent()
                         val response = llmInterface.generate(prompt, temperature = 0.1)
                         parseScore(response)
                     }
@@ -179,11 +178,12 @@ Rating:""".trimIndent()
         return EvaluationResult(metrics, detailed, if (errors.isEmpty()) null else errors)
     }
 
+    @Suppress("TooGenericExceptionCaught")
     private fun evaluateAnswerQuality(
         questions: List<String>,
         answers: List<String>,
         contexts: List<List<String>>,
-        groundTruths: List<String>?,
+        groundTruths: List<String?>?,
     ): EvaluationResult {
         val metrics = mutableMapOf<String, Double>()
         val detailed = mutableMapOf<String, List<Double>>()
@@ -201,7 +201,8 @@ Rating:""".trimIndent()
                     val gtText =
                         groundTruths?.getOrNull(idx)?.let { "\nGround truth answer:\n$it" } ?: ""
                     val prompt =
-                        """Evaluate the quality of this answer based on the question and provided context.
+                        """
+                        Evaluate the quality of this answer based on the question and provided context.
 
 Question: ${questions[idx]}
 
@@ -213,7 +214,8 @@ ${answers[idx]}
 
 Rate the answer on a scale of 0-10 based on accuracy, completeness, conciseness, and coherence.
 Provide your overall rating as a number from 0-10.
-Overall rating:""".trimIndent()
+Overall rating:
+                        """.trimIndent()
                     val response = llmInterface.generate(prompt, temperature = 0.1)
                     parseScore(response, defaultScore = 0.7)
                 }
@@ -227,15 +229,28 @@ Overall rating:""".trimIndent()
         return EvaluationResult(metrics, detailed, if (errors.isEmpty()) null else errors)
     }
 
-    private fun parseScore(response: String, defaultScore: Double = 0.5): Double {
-        val firstLine = response.trim().lineSequence().firstOrNull().orEmpty()
-        val match = Regex("(\\d+(\\.\\d+)?)").find(firstLine)
+    private fun parseScore(
+        response: String,
+        defaultScore: Double = 0.5,
+    ): Double {
+        val lines = response.trim().lineSequence().toList()
+        val allText =
+            if (lines.isEmpty()) {
+                response.trim()
+            } else {
+                lines.joinToString(" ")
+            }
+        val match = Regex("(\\d+(\\.\\d+)?)").find(allText)
         val value = match?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: defaultScore
         val normalized = value / 10.0
         return min(max(normalized, 0.0), 1.0)
     }
 
-    private fun saveResults(result: EvaluationResult, dir: String) {
+    @Suppress("TooGenericExceptionCaught")
+    private fun saveResults(
+        result: EvaluationResult,
+        dir: String,
+    ) {
         try {
             val outputDir = Path.of(dir)
             Files.createDirectories(outputDir)
@@ -243,14 +258,30 @@ Overall rating:""".trimIndent()
             val json = Json { prettyPrint = true }
 
             val metricsFile = outputDir.resolve("metrics_summary_$timestamp.json")
-            Files.writeString(metricsFile, json.encodeToString(MapSerializer, result.metrics))
+            val metricsSerializer =
+                kotlinx.serialization.builtins.MapSerializer(
+                    kotlinx.serialization.serializer<String>(),
+                    kotlinx.serialization.serializer<Double>(),
+                )
+            Files.writeString(metricsFile, json.encodeToString(metricsSerializer, result.metrics))
 
             val detailedFile = outputDir.resolve("detailed_scores_$timestamp.json")
-            Files.writeString(detailedFile, json.encodeToString(MapListSerializer, result.detailedScores))
+            val listDoubleSerializer = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<Double>())
+            val detailedSerializer =
+                kotlinx.serialization.builtins.MapSerializer(
+                    kotlinx.serialization.serializer<String>(),
+                    listDoubleSerializer,
+                )
+            Files.writeString(detailedFile, json.encodeToString(detailedSerializer, result.detailedScores))
 
             result.errorAnalysis?.let {
                 val errorsFile = outputDir.resolve("error_analysis_$timestamp.json")
-                Files.writeString(errorsFile, json.encodeToString(MapStringSerializer, it))
+                val errorsSerializer =
+                    kotlinx.serialization.builtins.MapSerializer(
+                        kotlinx.serialization.serializer<String>(),
+                        kotlinx.serialization.serializer<String>(),
+                    )
+                Files.writeString(errorsFile, json.encodeToString(errorsSerializer, it))
             }
 
             val reportFile = outputDir.resolve("evaluation_report_$timestamp.md")
@@ -303,20 +334,18 @@ Overall rating:""".trimIndent()
                 )
 
             val questions = evalData.map { it.question }
-            val groundTruths = evalData.mapNotNull { it.groundTruth }
-            val hasGroundTruths = groundTruths.isNotEmpty()
+            val groundTruths = evalData.map { it.groundTruth }
+            val hasGroundTruths = groundTruths.any { it != null }
 
             val answers = mutableListOf<String>()
             val contexts = mutableListOf<List<String>>()
             val causalPaths = mutableListOf<List<List<String>>>()
 
             for (question in questions) {
-                val answer = pipeline.run(question)
-                answers.add(answer)
-                val context = pipeline.hybridRetriever.retrieve(question, topK = 5).map { it as String }
-                contexts.add(context)
-                val paths = pipeline.graphRetriever.retrievePaths(question, maxPaths = 3)
-                causalPaths.add(paths)
+                val result = pipeline.runWithContext(question)
+                answers.add(result.answer)
+                contexts.add(result.context)
+                causalPaths.add(result.causalPaths)
             }
 
             return evaluator.evaluate(
@@ -329,50 +358,3 @@ Overall rating:""".trimIndent()
         }
     }
 }
-
-private val MapSerializer =
-    object : kotlinx.serialization.KSerializer<Map<String, Double>> {
-        override val descriptor = kotlinx.serialization.descriptors.buildClassSerialDescriptor("MapStringDouble")
-        override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Map<String, Double>) {
-            val jsonEncoder = encoder as? kotlinx.serialization.json.JsonEncoder
-            val jsonObject = buildJsonObject { value.forEach { put(it.key, JsonPrimitive(it.value)) } }
-            jsonEncoder?.encodeJsonElement(jsonObject)
-        }
-
-        override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Map<String, Double> {
-            return emptyMap()
-        }
-    }
-
-private val MapListSerializer =
-    object : kotlinx.serialization.KSerializer<Map<String, List<Double>>> {
-        override val descriptor = kotlinx.serialization.descriptors.buildClassSerialDescriptor("MapStringListDouble")
-        override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Map<String, List<Double>>) {
-            val jsonEncoder = encoder as? kotlinx.serialization.json.JsonEncoder
-            val jsonObject =
-                buildJsonObject {
-                    value.forEach { (k, v) ->
-                        put(k, JsonArray(v.map { JsonPrimitive(it) }))
-                    }
-                }
-            jsonEncoder?.encodeJsonElement(jsonObject)
-        }
-
-        override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Map<String, List<Double>> {
-            return emptyMap()
-        }
-    }
-
-private val MapStringSerializer =
-    object : kotlinx.serialization.KSerializer<Map<String, String>> {
-        override val descriptor = kotlinx.serialization.descriptors.buildClassSerialDescriptor("MapStringString")
-        override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Map<String, String>) {
-            val jsonEncoder = encoder as? kotlinx.serialization.json.JsonEncoder
-            val jsonObject = buildJsonObject { value.forEach { put(it.key, JsonPrimitive(it.value)) } }
-            jsonEncoder?.encodeJsonElement(jsonObject)
-        }
-
-        override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Map<String, String> {
-            return emptyMap()
-        }
-    }

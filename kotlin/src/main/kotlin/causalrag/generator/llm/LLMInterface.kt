@@ -1,5 +1,8 @@
 package causalrag.generator.llm
 
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.UserMessage
 import dev.langchain4j.model.chat.ChatModel
 import dev.langchain4j.model.ollama.OllamaChatModel
 import dev.langchain4j.model.openai.OpenAiChatModel
@@ -40,24 +43,12 @@ class LLMInterface(
             when (providerName) {
                 "openai" -> {
                     val model = getOpenAiModel(temperature, maxTokens, jsonMode, jsonArrayMode)
-                    val finalPrompt =
-                        if (!systemMessage.isNullOrBlank()) {
-                            "${systemMessage}\n\n$prompt"
-                        } else {
-                            prompt
-                        }
-                    model.chat(finalPrompt)
+                    model.chat(buildMessages(prompt)).aiMessage().text()
                 }
 
                 "ollama" -> {
                     val model = getOllamaModel()
-                    val finalPrompt =
-                        if (!systemMessage.isNullOrBlank()) {
-                            "${systemMessage}\n\n$prompt"
-                        } else {
-                            prompt
-                        }
-                    model.chat(finalPrompt)
+                    model.chat(buildMessages(prompt)).aiMessage().text()
                 }
 
                 else -> {
@@ -69,6 +60,13 @@ class LLMInterface(
             "Error generating response: ${ex.message}"
         }
     }
+
+    private fun buildMessages(prompt: String): List<ChatMessage> =
+        if (!systemMessage.isNullOrBlank()) {
+            listOf(SystemMessage.from(systemMessage), UserMessage.from(prompt))
+        } else {
+            listOf(UserMessage.from(prompt))
+        }
 
     private fun getOpenAiModel(
         temperature: Double,
@@ -100,8 +98,12 @@ class LLMInterface(
             if (baseUrl != null) {
                 builder.baseUrl(baseUrl)
             }
-            if (jsonMode && !jsonArrayMode) {
-                builder.responseFormat("json_object")
+            if (jsonMode) {
+                if (jsonArrayMode) {
+                    logger.debug { "jsonArrayMode enabled; relying on prompt since OpenAI responseFormat is json_object-only." }
+                } else {
+                    builder.responseFormat("json_object")
+                }
             }
             chatModel = builder.build()
             lastTemperature = temperature

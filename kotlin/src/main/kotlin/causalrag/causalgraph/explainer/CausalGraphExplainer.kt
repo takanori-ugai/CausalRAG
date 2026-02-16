@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import java.util.Locale
 
 private val logger = KotlinLogging.logger {}
 
@@ -33,7 +34,7 @@ class CausalGraphExplainer(
                     Triple(src, tgt, "Effects of $srcName on $tgtName"),
                     Triple(tgt, src, "Causes of $tgtName from $srcName"),
                 )) {
-                    val paths = findPaths(start, end, maxPathLength)
+                    val paths = graph.findPaths(start, end, maxPathLength)
                     if (paths.isNotEmpty()) {
                         explanation.add("\n$label:")
                         for ((idx, path) in paths.take(3).withIndex()) {
@@ -43,7 +44,7 @@ class CausalGraphExplainer(
                                 val n2 = nodeText[path[j + 1]] ?: path[j + 1]
                                 val weight = graph.edgeWeight(path[j], path[j + 1])
                                 if (includeWeights && weight != null) {
-                                    segments.add("$n1 --(${String.format("%.2f", weight)})--> $n2")
+                                    segments.add("$n1 --(${String.format(Locale.US, "%.2f", weight)})--> $n2")
                                 } else {
                                     segments.add("$n1 --> $n2")
                                 }
@@ -65,11 +66,12 @@ class CausalGraphExplainer(
         val numNodes = graph.numberOfNodes()
         val numEdges = graph.numberOfEdges()
 
-        val summary = mutableListOf(
-            "Causal Graph Summary:",
-            "- Concepts: $numNodes",
-            "- Relationships: $numEdges",
-        )
+        val summary =
+            mutableListOf(
+                "Causal Graph Summary:",
+                "- Concepts: $numNodes",
+                "- Relationships: $numEdges",
+            )
 
         val outDegrees = graph.nodes().associateWith { graph.outDegree(it) }
         val inDegrees = graph.nodes().associateWith { graph.inDegree(it) }
@@ -111,7 +113,10 @@ class CausalGraphExplainer(
         return summary.joinToString("\n")
     }
 
-    fun explainQueryRelevance(query: String, retriever: CausalPathRetriever): String {
+    fun explainQueryRelevance(
+        query: String,
+        retriever: CausalPathRetriever,
+    ): String {
         val relevantNodes = retriever.retrieveNodes(query, topK = 5)
         if (relevantNodes.isEmpty()) {
             return "No concepts directly relevant to '$query' were found in the causal graph."
@@ -119,7 +124,7 @@ class CausalGraphExplainer(
         val explanation = mutableListOf("Query: '$query'\n", "Directly relevant concepts:")
         for ((nodeId, score) in relevantNodes) {
             val name = nodeText[nodeId] ?: nodeId
-            explanation.add("- $name (relevance: ${String.format("%.2f", score)})")
+            explanation.add("- $name (relevance: ${String.format(Locale.US, "%.2f", score)})")
         }
         val paths = retriever.retrievePaths(query, maxPaths = 3)
         if (paths.isNotEmpty()) {
@@ -159,8 +164,8 @@ class CausalGraphExplainer(
                 }
             }
 
-        val nodesJson = json.encodeToString(JsonArray.serializer(), JsonArray(nodes))
-        val linksJson = json.encodeToString(JsonArray.serializer(), JsonArray(links))
+        val nodesJson = escapeForScript(json.encodeToString(JsonArray.serializer(), JsonArray(nodes)))
+        val linksJson = escapeForScript(json.encodeToString(JsonArray.serializer(), JsonArray(links)))
 
         return """
 <!DOCTYPE html>
@@ -253,6 +258,7 @@ class CausalGraphExplainer(
       d.fx = d.x;
       d.fy = d.y;
     }
+
     function dragged(event, d) {
       d.fx = event.x;
       d.fy = event.y;
@@ -277,27 +283,10 @@ class CausalGraphExplainer(
   </script>
 </body>
 </html>
-""".trimIndent()
+            """.trimIndent()
     }
 
-    private fun findPaths(start: String, end: String, maxDepth: Int): List<List<String>> {
-        val results = mutableListOf<List<String>>()
-        fun dfs(current: String, target: String, depth: Int, path: MutableList<String>, visited: MutableSet<String>) {
-            if (depth > maxDepth) return
-            if (current == target) {
-                results.add(path.toList())
-                return
-            }
-            for (next in graph.successors(current)) {
-                if (next in visited) continue
-                visited.add(next)
-                path.add(next)
-                dfs(next, target, depth + 1, path, visited)
-                path.removeAt(path.size - 1)
-                visited.remove(next)
-            }
-        }
-        dfs(start, end, 0, mutableListOf(start), mutableSetOf(start))
-        return results
-    }
+    private fun escapeForScript(json: String): String = json.replace("</", "<\\/")
+
+    // Uses DirectedGraph.findPaths to avoid duplicated DFS logic.
 }

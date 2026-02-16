@@ -17,6 +17,10 @@ abstract class BaseReranker(
         metadata: List<Map<String, Any>>? = null,
     ): List<Pair<String, Double>>
 
+    /**
+     * Alias of [rerank] kept for compatibility with call sites that expect a scored rerank method.
+     * This may evolve to return richer metadata in the future.
+     */
     fun rerankWithScores(
         query: String,
         candidates: List<String>,

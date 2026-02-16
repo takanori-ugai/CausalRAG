@@ -15,7 +15,7 @@ class CausalPathRetriever(
     private val graph: DirectedGraph = builder.getGraph()
     private val nodeEmbeddings = builder.nodeEmbeddings
     private val nodeText = builder.nodeText
-    private val encoder: EmbeddingModel? = builder.encoder
+    private val encoder: EmbeddingModel? = builder.getEncoder()
 
     fun retrieveNodes(
         query: String,
@@ -143,17 +143,21 @@ class CausalPathRetriever(
         if (relevantNodes.size < 2) return emptyList()
 
         val paths = mutableListOf<Pair<List<String>, List<String>>>()
+        val maxTotal = maxPaths * 3
         for (i in relevantNodes.indices) {
             for (j in i + 1 until relevantNodes.size) {
+                if (paths.size >= maxTotal) break
                 val src = relevantNodes[i]
                 val tgt = relevantNodes[j]
                 if (src == tgt) continue
                 for ((start, end) in listOf(src to tgt, tgt to src)) {
-                    val found = findPaths(start, end, maxPathLength)
+                    if (paths.size >= maxTotal) break
+                    val found = graph.findPaths(start, end, maxPathLength, limit = maxTotal - paths.size)
                     for (path in found) {
                         if (path.size >= minPathLength) {
                             val textPath = path.map { nodeText[it] ?: it }
                             paths.add(path to textPath)
+                            if (paths.size >= maxTotal) break
                         }
                     }
                 }
@@ -162,38 +166,6 @@ class CausalPathRetriever(
 
         val sorted = paths.sortedBy { it.first.size }
         return sorted.take(maxPaths).map { it.second }
-    }
-
-    private fun findPaths(
-        start: String,
-        end: String,
-        maxDepth: Int,
-    ): List<List<String>> {
-        val results = mutableListOf<List<String>>()
-
-        fun dfs(
-            current: String,
-            target: String,
-            depth: Int,
-            path: MutableList<String>,
-            visited: MutableSet<String>,
-        ) {
-            if (depth > maxDepth) return
-            if (current == target) {
-                results.add(path.toList())
-                return
-            }
-            for (next in graph.successors(current)) {
-                if (next in visited) continue
-                visited.add(next)
-                path.add(next)
-                dfs(next, target, depth + 1, path, visited)
-                path.removeAt(path.size - 1)
-                visited.remove(next)
-            }
-        }
-        dfs(start, end, 0, mutableListOf(start), mutableSetOf(start))
-        return results
     }
 
     fun getCausalExplanation(query: String): String {

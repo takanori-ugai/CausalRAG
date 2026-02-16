@@ -1,6 +1,5 @@
 package causalrag.utils
 
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 interface EmbeddingModel {
@@ -17,8 +16,6 @@ class LangChain4jEmbeddingModel(
         val vector = embedding.vector()
         return DoubleArray(vector.size) { idx -> vector[idx].toDouble() }
     }
-
-    override fun encodeAll(texts: List<String>): List<DoubleArray> = texts.map { encode(it) }
 }
 
 class SimpleHashEmbedding(
@@ -28,7 +25,7 @@ class SimpleHashEmbedding(
         val vector = DoubleArray(dimension)
         val tokens = tokenize(text)
         for (token in tokens) {
-            val idx = abs(token.hashCode()) % dimension
+            val idx = (token.hashCode() and Int.MAX_VALUE) % dimension
             vector[idx] += 1.0
         }
         return l2Normalize(vector)

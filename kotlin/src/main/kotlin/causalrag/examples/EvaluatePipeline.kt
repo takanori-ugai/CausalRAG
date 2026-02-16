@@ -5,21 +5,18 @@ import causalrag.evaluation.CausalEvaluator
 import causalrag.evaluation.EvalExample
 import causalrag.generator.llm.LLMInterface
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
 
 fun main(args: Array<String>) {
-    val options = parseOptions(args.toList())
-    val evalDataPath = options["eval-data"] ?: run {
-        println("Missing required --eval-data")
-        return
-    }
+    val options = CliUtils.parseOptions(args.toList())
+    val evalDataPath =
+        options["eval-data"] ?: run {
+            println("Missing required --eval-data")
+            return
+        }
     val outputDir = options["output-dir"] ?: "./eval_results"
     val modelName = options["model-name"] ?: "gpt-4"
     val evalModel = options["eval-model"]
@@ -40,7 +37,11 @@ fun main(args: Array<String>) {
     }
 
     logger.info { "Loading evaluation data from $evalDataPath" }
-    val evalData = loadEvaluationData(evalDataPath)
+    val evalData = CliUtils.loadEvaluationData(evalDataPath)
+    if (evalData.isEmpty()) {
+        logger.error { "No evaluation examples found in $evalDataPath" }
+        return
+    }
 
     val llm =
         LLMInterface(
@@ -75,39 +76,4 @@ fun main(args: Array<String>) {
     }
 
     logger.info { "Detailed results saved to $outputDir" }
-}
-
-private fun loadEvaluationData(filepath: String): List<EvalExample> {
-    val json = Json { ignoreUnknownKeys = true }
-    val text = Files.readString(Path.of(filepath))
-    val root = json.parseToJsonElement(text)
-    if (root !is JsonArray) return emptyList()
-    return root.mapNotNull { element ->
-        val obj = element as? JsonObject ?: return@mapNotNull null
-        val question = (obj["question"] as? JsonPrimitive)?.content ?: return@mapNotNull null
-        val groundTruth = (obj["ground_truth"] as? JsonPrimitive)?.content
-        EvalExample(question = question, groundTruth = groundTruth)
-    }
-}
-
-private fun parseOptions(args: List<String>): Map<String, String> {
-    val options = mutableMapOf<String, String>()
-    var i = 0
-    while (i < args.size) {
-        val arg = args[i]
-        if (arg.startsWith("--")) {
-            val key = arg.removePrefix("--")
-            val value = args.getOrNull(i + 1)
-            if (value != null && !value.startsWith("-")) {
-                options[key] = value
-                i += 2
-            } else {
-                options[key] = "true"
-                i += 1
-            }
-        } else {
-            i += 1
-        }
-    }
-    return options
 }

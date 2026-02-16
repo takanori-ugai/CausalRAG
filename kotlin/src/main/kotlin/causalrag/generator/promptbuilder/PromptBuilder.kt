@@ -13,14 +13,12 @@ class PromptBuilder(
     private val llmInterface: LLMInterface? = null,
     private val templatesDir: String? = null,
 ) {
-    @Suppress("UnusedParameter")
     fun buildPrompt(
         query: String,
         passages: List<String>,
         causalPaths: List<List<String>>? = null,
         causalNodes: List<String>? = null,
         causalGraphSummary: String? = null,
-        exampleTriples: List<Triple<String, String, Double>>? = null,
     ): String {
         val normalizedPaths = causalPaths ?: causalNodes?.let { listOf(it) }
         val pathSummaries =
@@ -70,8 +68,10 @@ class PromptBuilder(
         query: String,
     ): List<String> {
         if (llmInterface == null) return emptyList()
+        val maxPathsToSummarize = 5
         return try {
-            val allPathsText = causalPaths.joinToString("\n") { it.joinToString(" -> ") }
+            val selectedPaths = causalPaths.take(maxPathsToSummarize)
+            val allPathsText = selectedPaths.joinToString("\n") { it.joinToString(" -> ") }
             val overviewPrompt = """Summarize the following causal relationships as they relate to: "$query"
 
 Causal paths:
@@ -81,7 +81,7 @@ Provide a concise summary (1-2 sentences) that captures the key causal mechanism
             val overview = llmInterface.generate(overviewPrompt, temperature = 0.3, maxTokens = 150)
             val summaries = mutableListOf<String>()
             summaries.add(overview.trim())
-            for (path in causalPaths) {
+            for (path in selectedPaths) {
                 val pathText = path.joinToString(" -> ")
                 if (path.size <= 3) {
                     summaries.add(rewriteAsNaturalLanguage(pathText))
@@ -387,6 +387,7 @@ fun buildPrompt(
     passages: List<String>,
     causalPaths: List<List<String>>? = null,
     causalNodes: List<String>? = null,
+    causalGraphSummary: String? = null,
     templateStyle: String = "detailed",
     llmInterface: LLMInterface? = null,
     templatesDir: String? = null,
@@ -397,5 +398,5 @@ fun buildPrompt(
             llmInterface = llmInterface,
             templatesDir = templatesDir,
         )
-    return builder.buildPrompt(query, passages, causalPaths, causalNodes)
+    return builder.buildPrompt(query, passages, causalPaths, causalNodes, causalGraphSummary)
 }

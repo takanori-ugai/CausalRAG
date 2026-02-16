@@ -34,7 +34,7 @@ fun main(args: Array<String>) {
 }
 
 private fun handleIndex(args: List<String>) {
-    val opts = parseOptions(args)
+    val opts = CliUtils.parseOptions(args)
     val input = opts["input"] ?: opts["i"]
     val output = opts["output"] ?: opts["o"]
     val model = opts["model"]
@@ -69,7 +69,7 @@ private fun handleIndex(args: List<String>) {
 }
 
 private fun handleQuery(args: List<String>) {
-    val opts = parseOptions(args)
+    val opts = CliUtils.parseOptions(args)
     val indexDir = opts["index"] ?: opts["i"]
     val query = opts["query"] ?: opts["q"]
     val model = opts["model"]
@@ -101,7 +101,7 @@ private fun handleQuery(args: List<String>) {
     println("\nAnswer: $answer")
 
     println("\nSupporting Context:")
-    val context = pipeline.hybridRetriever.retrieve(query, topK = topK).map { it as String }
+    val context = pipeline.hybridRetriever.retrieve(query, topK = topK)
     context.forEachIndexed { idx, ctx ->
         val preview = if (ctx.length > 200) ctx.substring(0, 200) + "..." else ctx
         println("[${idx + 1}] $preview")
@@ -121,7 +121,7 @@ private fun handleServe() {
 }
 
 private fun handleEvaluate(args: List<String>) {
-    val opts = parseOptions(args)
+    val opts = CliUtils.parseOptions(args)
     val evalData = opts["eval-data"]
     val outputDir = opts["output-dir"] ?: "./eval_results"
     val modelName = opts["model-name"] ?: "gpt-4"
@@ -153,7 +153,7 @@ private fun handleEvaluate(args: List<String>) {
             systemMessage = "You are an expert evaluator assessing the quality of answers to questions.",
         )
 
-    val evalExamples = loadEvaluationData(evalData)
+    val evalExamples = CliUtils.loadEvaluationData(evalData)
     if (evalExamples.isEmpty()) {
         println("No evaluation examples found in $evalData")
         return
@@ -182,49 +182,16 @@ private fun handleEvaluate(args: List<String>) {
     println("Detailed results saved to $outputDir")
 }
 
-private fun parseOptions(args: List<String>): Map<String, String> {
-    val options = mutableMapOf<String, String>()
-    var i = 0
-    while (i < args.size) {
-        val arg = args[i]
-        if (arg.startsWith("--")) {
-            val key = arg.removePrefix("--")
-            val value = args.getOrNull(i + 1)
-            if (value != null && !value.startsWith("-")) {
-                options[key] = value
-                i += 2
-            } else {
-                options[key] = "true"
-                i += 1
-            }
-        } else if (arg.startsWith("-")) {
-            val key = arg.removePrefix("-")
-            val value = args.getOrNull(i + 1)
-            if (value != null && !value.startsWith("-")) {
-                options[key] = value
-                i += 2
-            } else {
-                options[key] = "true"
-                i += 1
-            }
-        } else {
-            i += 1
-        }
-    }
-    return options
-}
-
 private fun loadDocuments(input: String): List<String> {
     val path = Path.of(input)
     return if (path.isDirectory()) {
-        Files
-            .walk(path)
-            .filter { Files.isRegularFile(it) }
-            .filter { it.name.endsWith(".txt") }
-            .map { readTextFile(it) }
-            .filter { it != null }
-            .map { it!! }
-            .toList()
+        Files.walk(path).use { stream ->
+            stream
+                .filter { Files.isRegularFile(it) }
+                .filter { it.name.endsWith(".txt") }
+                .toList()
+                .mapNotNull { readTextFile(it) }
+        }
     } else {
         readTextFile(path)?.let { listOf(it) } ?: emptyList()
     }
@@ -249,19 +216,6 @@ Usage:
   cli serve
   cli evaluate --eval-data <path> [--index <dir>] [--output-dir <dir>] [--model-name <llm_model>] [--eval-model <llm_model>] [--embedding-model <embedding_model>] [--api-key <key>] [--provider <name>]
   cli --version
-""".trimIndent(),
+        """.trimIndent(),
     )
-}
-
-private fun loadEvaluationData(filepath: String): List<EvalExample> {
-    val text = Files.readString(Path.of(filepath))
-    val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-    val root = json.parseToJsonElement(text)
-    if (root !is kotlinx.serialization.json.JsonArray) return emptyList()
-    return root.mapNotNull { element ->
-        val obj = element as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
-        val question = (obj["question"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
-        val groundTruth = (obj["ground_truth"] as? kotlinx.serialization.json.JsonPrimitive)?.content
-        EvalExample(question = question, groundTruth = groundTruth)
-    }
 }
