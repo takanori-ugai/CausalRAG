@@ -1,0 +1,11 @@
+{
+  "modelName": "gpt-4o-mini",
+  "embeddingModel": "text-embedding-3-small",
+  "llmProvider": "openai",
+  "llmApiKey": null,
+  "llmBaseUrl": null,
+  "embeddingApiKey": null,
+  "graphPath": null,
+  "indexPath": null,
+  "templateStyle": "detailed"
+}
