@@ -35,7 +35,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.13")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
-    implementation("io.github.oshai:kotlin-logging-jvm:7.0.14")
+    implementation("io.github.oshai:kotlin-logging-jvm:8.0.01")
     implementation("com.github.haifengl:smile-core:4.4.2")
     implementation("gg.jte:jte-kotlin:3.2.3")
 
