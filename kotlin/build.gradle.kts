@@ -47,7 +47,7 @@ dependencies {
     implementation("dev.langchain4j:langchain4j-community-neo4j:1.11.0-beta17")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.3.10")
-    testImplementation("io.mockk:mockk:1.13.9")
+    testImplementation("io.mockk:mockk:1.14.9")
 }
 
 tasks {
