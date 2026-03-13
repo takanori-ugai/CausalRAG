@@ -8,6 +8,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Retrieves graph nodes and paths relevant to a natural-language query.
+ */
 @Suppress("TooGenericExceptionCaught")
 class CausalPathRetriever(
     private val builder: CausalGraphBuilder,
@@ -18,6 +21,14 @@ class CausalPathRetriever(
     private val nodeText = builder.nodeText
     private val encoder: EmbeddingModel? = builder.getEncoder()
 
+    /**
+     * Returns graph nodes that are semantically similar to the query.
+     *
+     * @param query User query.
+     * @param topK Maximum number of nodes to return.
+     * @param threshold Minimum similarity threshold.
+     * @return Node identifiers paired with similarity scores.
+     */
     fun retrieveNodes(
         query: String,
         topK: Int = 5,
@@ -46,6 +57,15 @@ class CausalPathRetriever(
         }
     }
 
+    /**
+     * Expands the query into a set of relevant causal nodes.
+     *
+     * @param query User query.
+     * @param topK Maximum number of seed nodes to consider.
+     * @param maxHops Number of ancestor or descendant hops to include.
+     * @param includeSimilar Whether to include semantically similar nodes.
+     * @return Relevant node identifiers.
+     */
     fun retrievePathNodes(
         query: String,
         topK: Int = 5,
@@ -134,6 +154,15 @@ class CausalPathRetriever(
         return ancestors
     }
 
+    /**
+     * Finds causal paths between query-relevant nodes.
+     *
+     * @param query User query.
+     * @param maxPaths Maximum number of paths to return.
+     * @param minPathLength Minimum number of nodes in a returned path.
+     * @param maxPathLength Maximum search depth.
+     * @return Ordered node labels for each path.
+     */
     fun retrievePaths(
         query: String,
         maxPaths: Int = 5,
@@ -169,6 +198,12 @@ class CausalPathRetriever(
         return sorted.take(maxPaths).map { it.second }
     }
 
+    /**
+     * Builds a short textual explanation of the causal paths relevant to a query.
+     *
+     * @param query User query.
+     * @return Human-readable causal explanation.
+     */
     fun getCausalExplanation(query: String): String {
         val paths = retrievePaths(query, maxPaths = 3)
         if (paths.isEmpty()) return "No relevant causal relationships found."
@@ -184,6 +219,12 @@ class CausalPathRetriever(
         return builder.toString()
     }
 
+    /**
+     * Extracts a subgraph containing query-relevant nodes.
+     *
+     * @param query User query.
+     * @return Subgraph induced by the relevant nodes.
+     */
     fun highlightSubgraph(query: String): DirectedGraph {
         val nodes = retrievePathNodes(query)
         return graph.subgraph(nodes.toSet())

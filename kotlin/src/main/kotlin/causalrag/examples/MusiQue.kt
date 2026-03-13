@@ -22,6 +22,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.DoubleAdder
 import kotlin.math.max
 
+/**
+ * Paragraph entry from the MusiQue dataset.
+ *
+ * @property idx Paragraph index within the example.
+ * @property title Source title.
+ * @property paragraphText Paragraph content.
+ * @property isSupporting Whether the paragraph is annotated as supporting evidence.
+ */
 @Serializable
 data class MusiqueParagraph(
     val idx: Int,
@@ -32,6 +40,16 @@ data class MusiqueParagraph(
     val isSupporting: Boolean,
 )
 
+/**
+ * Single MusiQue question-answer example.
+ *
+ * @property id Example identifier.
+ * @property paragraphs Paragraphs associated with the example.
+ * @property question Question text.
+ * @property answer Gold answer text.
+ * @property answerAliases Alternate gold answers.
+ * @property answerable Whether the example is answerable.
+ */
 @Serializable
 data class MusiqueExample(
     val id: String,
@@ -43,10 +61,18 @@ data class MusiqueExample(
     val answerable: Boolean = true,
 )
 
+/**
+ * Runs batch evaluation of the pipeline on the MusiQue dataset.
+ */
 object MusiQue {
     private val inputJson = Json { ignoreUnknownKeys = true }
     private val prettyJson = Json { prettyPrint = true }
 
+    /**
+     * Entry point for MusiQue evaluation.
+     *
+     * @param args Command-line arguments.
+     */
     @JvmStatic
     fun main(args: Array<String>) {
         val dataPath = Path.of("data/musique_ans_v1.0_train-200.jsonl")

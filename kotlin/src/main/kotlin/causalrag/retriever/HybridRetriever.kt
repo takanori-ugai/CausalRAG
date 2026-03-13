@@ -7,6 +7,9 @@ import java.util.LinkedHashMap
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Combines semantic, causal, and optional BM25 retrieval signals.
+ */
 @Suppress("TooGenericExceptionCaught")
 class HybridRetriever(
     private val vectorRetriever: VectorStoreRetriever,
@@ -94,16 +97,37 @@ class HybridRetriever(
             )
     }
 
+    /**
+     * Retrieves the top passages for a query.
+     *
+     * @param query User query.
+     * @param topK Maximum number of passages to return.
+     * @return Retrieved passages ordered by hybrid score.
+     */
     fun retrieve(
         query: String,
         topK: Int = 5,
     ): List<String> = retrieveWithDetails(query, topK).map { it["passage"] as String }
 
+    /**
+     * Retrieves passages together with hybrid scores.
+     *
+     * @param query User query.
+     * @param topK Maximum number of passages to return.
+     * @return Passage-score pairs.
+     */
     fun retrieveWithScores(
         query: String,
         topK: Int = 5,
     ): List<Pair<String, Double>> = retrieveWithDetails(query, topK).map { it["passage"] as String to (it["score"] as Double) }
 
+    /**
+     * Retrieves passages with full scoring details.
+     *
+     * @param query User query.
+     * @param topK Maximum number of passages to return.
+     * @return Result maps containing passage text, score, and feature breakdowns.
+     */
     fun retrieveWithDetails(
         query: String,
         topK: Int = 5,
@@ -185,6 +209,13 @@ class HybridRetriever(
         return sorted.take(topK)
     }
 
+    /**
+     * Explains how the hybrid retriever scored a passage for a query.
+     *
+     * @param query User query.
+     * @param passage Passage to explain.
+     * @return Human-readable explanation string.
+     */
     fun getExplanation(
         query: String,
         passage: String,
@@ -221,6 +252,9 @@ class HybridRetriever(
         return explanation.joinToString("\n")
     }
 
+    /**
+     * Clears the query result cache.
+     */
     fun clearCache() {
         queryCache.clear()
     }

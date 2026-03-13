@@ -11,6 +11,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Thin wrapper around provider-specific chat model implementations.
+ *
+ * @property modelName Provider model identifier.
+ * @property systemMessage Optional system prompt prepended to every request.
+ * @property baseUrl Optional base URL override for self-hosted backends.
+ */
 @Suppress("TooGenericExceptionCaught")
 class LLMInterface(
     private val modelName: String = "gpt-4o-mini",
@@ -28,6 +35,17 @@ class LLMInterface(
     private var lastMaxTokens: Int? = null
     private var lastJsonArrayMode: Boolean? = null
 
+    /**
+     * Generates a chat completion for the supplied prompt.
+     *
+     * @param prompt User prompt.
+     * @param temperature Sampling temperature.
+     * @param maxTokens Maximum completion token budget.
+     * @param stream Whether streaming was requested.
+     * @param jsonMode Whether to request JSON output when supported.
+     * @param jsonArrayMode Whether the prompt expects a JSON array response.
+     * @return Model response text.
+     */
     fun generate(
         prompt: String,
         temperature: Double = 0.3,

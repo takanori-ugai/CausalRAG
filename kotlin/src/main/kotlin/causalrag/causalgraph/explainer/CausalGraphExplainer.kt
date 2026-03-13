@@ -11,10 +11,21 @@ import java.util.Locale
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Produces human-readable explanations and visualizations for causal graphs.
+ */
 class CausalGraphExplainer(
     private val graph: DirectedGraph,
     private val nodeText: Map<String, String> = emptyMap(),
 ) {
+    /**
+     * Prints representative paths between the supplied nodes.
+     *
+     * @param nodes Node identifiers to connect.
+     * @param maxPathLength Maximum path depth to search.
+     * @param includeWeights Whether edge weights should be shown.
+     * @return Human-readable path listing.
+     */
     fun printPaths(
         nodes: List<String>,
         maxPathLength: Int = 5,
@@ -61,6 +72,11 @@ class CausalGraphExplainer(
         return explanation.joinToString("\n")
     }
 
+    /**
+     * Summarizes high-level graph structure and central concepts.
+     *
+     * @return Human-readable graph summary.
+     */
     fun summarizeGraph(): String {
         if (graph.numberOfNodes() == 0) return "Empty causal graph (no nodes or relationships)."
         val numNodes = graph.numberOfNodes()
@@ -113,6 +129,13 @@ class CausalGraphExplainer(
         return summary.joinToString("\n")
     }
 
+    /**
+     * Explains why the graph is relevant to a query using a [CausalPathRetriever].
+     *
+     * @param query User query.
+     * @param retriever Retriever used to score relevant nodes and paths.
+     * @return Human-readable relevance explanation.
+     */
     fun explainQueryRelevance(
         query: String,
         retriever: CausalPathRetriever,
@@ -138,6 +161,13 @@ class CausalGraphExplainer(
         return explanation.joinToString("\n")
     }
 
+    /**
+     * Generates a self-contained HTML visualization of the graph.
+     *
+     * @param highlightNodes Optional node identifiers to highlight.
+     * @param highlightEdges Optional directed edges to highlight.
+     * @return HTML document string.
+     */
     fun generateGraphVizHtml(
         highlightNodes: List<String>? = null,
         highlightEdges: List<Pair<String, String>>? = null,

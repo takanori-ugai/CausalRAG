@@ -21,12 +21,22 @@ import kotlin.math.max
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Normalized causal relationship extracted from text.
+ *
+ * @property cause Cause node text.
+ * @property effect Effect node text.
+ * @property confidence Optional confidence score in the extracted relation.
+ */
 data class CausalTriple(
     val cause: String,
     val effect: String,
     val confidence: Double? = null,
 )
 
+/**
+ * Extracts causal triples from free text using rule-based, LLM-based, or hybrid logic.
+ */
 @Suppress("TooGenericExceptionCaught")
 class CausalTripleExtractor(
     private val method: String = "hybrid",
@@ -93,6 +103,12 @@ class CausalTripleExtractor(
             CausalPattern(Regex("([\\w\\s]+?)\\s+drives\\s+([\\w\\s]+)", RegexOption.IGNORE_CASE)),
         )
 
+    /**
+     * Extracts causal relationships from a text chunk.
+     *
+     * @param text Source text.
+     * @return Deduplicated causal triples.
+     */
     fun extract(text: String): List<CausalTriple> =
         when (method) {
             "rule" -> {
@@ -392,6 +408,9 @@ CAUSAL RELATIONSHIPS:"""
     }
 }
 
+/**
+ * Builds and persists a causal graph from extracted causal triples.
+ */
 @Suppress("TooGenericExceptionCaught")
 class CausalGraphBuilder(
     modelName: String = "all-MiniLM-L6-v2",
@@ -406,11 +425,19 @@ class CausalGraphBuilder(
 ) {
     private val graph = DirectedGraph()
     private val _nodeText: MutableMap<String, String> = mutableMapOf()
+
+    /**
+     * Canonical text labels for graph nodes keyed by node identifier.
+     */
     val nodeText: Map<String, String> get() = _nodeText
     private val nodeVariants: MutableMap<String, MutableList<String>> = mutableMapOf()
     private val encoder: EmbeddingModel? =
         embeddingModel ?: EmbeddingModelFactory.createDefault(modelName, embeddingApiKey)
     private val _nodeEmbeddings: MutableMap<String, DoubleArray> = mutableMapOf()
+
+    /**
+     * Embeddings for graph nodes keyed by node identifier.
+     */
     val nodeEmbeddings: Map<String, DoubleArray> get() = _nodeEmbeddings
     private val extractor = CausalTripleExtractor(method = extractorMethod, llmInterface = llmInterface)
 
@@ -420,6 +447,11 @@ class CausalGraphBuilder(
         }
     }
 
+    /**
+     * Adds extracted causal triples into the graph.
+     *
+     * @param triples Causal relationships to insert.
+     */
     fun addTriples(triples: List<CausalTriple>) {
         for (triple in triples) {
             val confidence = triple.confidence ?: 1.0
@@ -469,6 +501,13 @@ class CausalGraphBuilder(
         return text
     }
 
+    /**
+     * Extracts triples from documents and adds them to the graph in batches.
+     *
+     * @param docs Documents to index.
+     * @param batchSize Number of documents to process per batch.
+     * @return Number of new edges added to the graph.
+     */
     fun indexDocuments(
         docs: List<String>,
         batchSize: Int = 5,
@@ -498,17 +537,44 @@ class CausalGraphBuilder(
         return newEdges
     }
 
+    /**
+     * Returns the underlying directed graph.
+     *
+     * @return Current graph instance.
+     */
     fun getGraph(): DirectedGraph = graph
 
+    /**
+     * Returns the canonical label and known variants for a node.
+     *
+     * @param nodeId Node identifier.
+     * @return Canonical label followed by observed variants.
+     */
     fun getNodeVariants(nodeId: String): List<String> {
         val variants = nodeVariants[nodeId] ?: emptyList()
         return listOfNotNull(_nodeText[nodeId]) + variants
     }
 
+    /**
+     * Returns the embedding for a node when available.
+     *
+     * @param nodeId Node identifier.
+     * @return Embedding vector or `null`.
+     */
     fun getEmbedding(nodeId: String): DoubleArray? = _nodeEmbeddings[nodeId]
 
+    /**
+     * Returns the encoder used by the builder.
+     *
+     * @return Configured embedding model or `null`.
+     */
     fun getEncoder(): EmbeddingModel? = encoder
 
+    /**
+     * Returns a line-oriented description of graph edges.
+     *
+     * @return Human-readable edge listing.
+     */
     fun describeGraph(): String {
         if (graph.numberOfEdges() == 0) return "Empty causal graph (no causal relationships found)"
         return graph.edges().joinToString("\n") { edge ->
@@ -518,6 +584,12 @@ class CausalGraphBuilder(
         }
     }
 
+    /**
+     * Saves the graph, node metadata, and embeddings to disk.
+     *
+     * @param filepath Output file path.
+     * @return `true` when the graph is saved successfully.
+     */
     fun save(filepath: String): Boolean =
         try {
             val json = Json { prettyPrint = true }
@@ -573,6 +645,12 @@ class CausalGraphBuilder(
             false
         }
 
+    /**
+     * Loads a serialized graph from disk.
+     *
+     * @param filepath Source file path.
+     * @return `true` when the graph is loaded successfully.
+     */
     fun load(filepath: String): Boolean {
         val path = Path.of(filepath)
         if (!Files.exists(path)) {
@@ -641,6 +719,11 @@ class CausalGraphBuilder(
         }
     }
 
+    /**
+     * Computes summary statistics for the current graph.
+     *
+     * @return Diagnostic statistics and top relationships.
+     */
     fun getExtractionStatistics(): Map<String, Any> {
         if (graph.numberOfEdges() == 0) return mapOf("error" to "Graph is empty")
         val nodes = graph.numberOfNodes()
@@ -703,6 +786,17 @@ class CausalGraphBuilder(
         )
     }
 
+    /**
+     * Serializes the graph into a visualization payload.
+     *
+     * @param outputPath Optional output file path.
+     * @param format Output format. Currently supports `json`.
+     * @param maxNodes Maximum number of nodes to include.
+     * @param minEdgeWeight Minimum edge weight threshold.
+     * @param highlightNodes Optional nodes to flag as highlighted.
+     * @param title Visualization title.
+     * @return Serialized payload or output path, depending on [outputPath].
+     */
     fun visualizeGraph(
         outputPath: String? = null,
         format: String = "json",

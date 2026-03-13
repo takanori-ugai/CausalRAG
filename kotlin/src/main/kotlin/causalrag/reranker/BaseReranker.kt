@@ -4,6 +4,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Base abstraction for rerankers that reorder retrieved passages.
+ *
+ * @property name Reranker name reported in diagnostics.
+ */
 abstract class BaseReranker(
     val name: String = "base",
 ) {
@@ -11,6 +16,14 @@ abstract class BaseReranker(
         logger.debug { "Initialized $name reranker" }
     }
 
+    /**
+     * Scores and orders candidate passages for a query.
+     *
+     * @param query User query.
+     * @param candidates Candidate passages.
+     * @param metadata Optional metadata aligned with [candidates].
+     * @return Candidate passages paired with descending scores.
+     */
     abstract fun rerank(
         query: String,
         candidates: List<String>,
@@ -27,6 +40,14 @@ abstract class BaseReranker(
         metadata: List<Map<String, Any>>? = null,
     ): List<Pair<String, Double>> = rerank(query, candidates, metadata)
 
+    /**
+     * Explains why a candidate received its reranking score.
+     *
+     * @param query User query.
+     * @param candidate Candidate passage.
+     * @param metadata Optional candidate metadata.
+     * @return Human-readable explanation string.
+     */
     open fun getExplanation(
         query: String,
         candidate: String,

@@ -7,6 +7,9 @@ import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Builds prompts that combine retrieved passages with causal graph context.
+ */
 @Suppress("TooGenericExceptionCaught")
 class PromptBuilder(
     private val templateStyle: String = "detailed",
@@ -15,6 +18,16 @@ class PromptBuilder(
 ) {
     private val jteRenderer = JtePromptRenderer(templatesDir)
 
+    /**
+     * Builds a prompt for answer generation.
+     *
+     * @param query User query.
+     * @param passages Retrieved passages.
+     * @param causalPaths Optional causal paths relevant to the query.
+     * @param causalNodes Optional causal nodes relevant to the query.
+     * @param causalGraphSummary Optional textual graph summary.
+     * @return Rendered prompt text.
+     */
     fun buildPrompt(
         query: String,
         passages: List<String>,
@@ -386,6 +399,19 @@ Write a concise explanation using simple natural language that maintains all the
     }
 }
 
+/**
+ * Convenience wrapper for constructing a [PromptBuilder] and rendering a prompt in one call.
+ *
+ * @param query User query.
+ * @param passages Retrieved passages.
+ * @param causalPaths Optional causal paths relevant to the query.
+ * @param causalNodes Optional causal nodes relevant to the query.
+ * @param causalGraphSummary Optional textual graph summary.
+ * @param templateStyle Prompt template style.
+ * @param llmInterface Optional LLM used for path summarization.
+ * @param templatesDir Optional template override directory.
+ * @return Rendered prompt text.
+ */
 fun buildPrompt(
     query: String,
     passages: List<String>,

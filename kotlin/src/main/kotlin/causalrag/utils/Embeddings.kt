@@ -2,12 +2,30 @@ package causalrag.utils
 
 import kotlin.math.sqrt
 
+/**
+ * Minimal embedding model contract used across retrieval and graph components.
+ */
 interface EmbeddingModel {
+    /**
+     * Encodes a single string into a numeric embedding vector.
+     *
+     * @param text Input text.
+     * @return Embedding vector for [text].
+     */
     fun encode(text: String): DoubleArray
 
+    /**
+     * Encodes multiple strings in order.
+     *
+     * @param texts Input texts.
+     * @return Embedding vectors aligned with [texts].
+     */
     fun encodeAll(texts: List<String>): List<DoubleArray> = texts.map { encode(it) }
 }
 
+/**
+ * Adapter that exposes a LangChain4j embedding model through [EmbeddingModel].
+ */
 class LangChain4jEmbeddingModel(
     private val delegate: dev.langchain4j.model.embedding.EmbeddingModel,
 ) : EmbeddingModel {
@@ -18,6 +36,11 @@ class LangChain4jEmbeddingModel(
     }
 }
 
+/**
+ * Lightweight fallback embedding model based on token hashing.
+ *
+ * @property dimension Output vector size.
+ */
 class SimpleHashEmbedding(
     private val dimension: Int = 384,
 ) : EmbeddingModel {
@@ -38,6 +61,13 @@ class SimpleHashEmbedding(
             .toList()
 }
 
+/**
+ * Computes cosine similarity between two embedding vectors.
+ *
+ * @param a First vector.
+ * @param b Second vector.
+ * @return Cosine similarity in the range `[-1, 1]`, or `0.0` when vectors are incompatible.
+ */
 fun cosineSimilarity(
     a: DoubleArray,
     b: DoubleArray,
@@ -68,7 +98,17 @@ private fun l2Normalize(vector: DoubleArray): DoubleArray {
     return vector
 }
 
+/**
+ * Factory methods for constructing embedding backends used by the repository.
+ */
 object EmbeddingModelFactory {
+    /**
+     * Creates the default embedding model for the current environment.
+     *
+     * @param modelName Embedding model name.
+     * @param apiKey Optional API key. When absent, falls back to [SimpleHashEmbedding].
+     * @return Configured embedding model.
+     */
     fun createDefault(
         modelName: String,
         apiKey: String? = System.getenv("OPENAI_API_KEY"),
@@ -79,6 +119,13 @@ object EmbeddingModelFactory {
             SimpleHashEmbedding()
         }
 
+    /**
+     * Creates an OpenAI-backed embedding model.
+     *
+     * @param modelName Embedding model name.
+     * @param apiKey OpenAI API key.
+     * @return Configured embedding model.
+     */
     fun createOpenAi(
         modelName: String,
         apiKey: String,

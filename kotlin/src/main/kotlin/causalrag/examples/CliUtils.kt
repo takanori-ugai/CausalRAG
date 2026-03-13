@@ -14,9 +14,24 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 
+/**
+ * Shared CLI helpers for parsing arguments and running evaluations.
+ */
 object CliUtils {
     private val logger = KotlinLogging.logger {}
 
+    /**
+     * Configuration used by [runEvaluation].
+     *
+     * @property evalDataPath Path to the evaluation dataset.
+     * @property outputDir Directory for evaluation outputs.
+     * @property modelName Generation model name.
+     * @property evalModel Optional evaluator model override.
+     * @property embeddingModel Embedding model name.
+     * @property apiKey Optional API key.
+     * @property provider LLM provider name.
+     * @property indexDir Optional directory containing a prebuilt index.
+     */
     data class EvalRunConfig(
         val evalDataPath: String,
         val outputDir: String,
@@ -28,11 +43,23 @@ object CliUtils {
         val indexDir: String?,
     )
 
+    /**
+     * Result returned by [runEvaluation].
+     *
+     * @property results Evaluation metrics and details.
+     * @property outputDir Directory where outputs were written.
+     */
     data class EvalRunResult(
         val results: EvaluationResult,
         val outputDir: String,
     )
 
+    /**
+     * Parses `--key value` style CLI arguments into a map.
+     *
+     * @param args Raw argument list.
+     * @return Parsed option map.
+     */
     fun parseOptions(args: List<String>): Map<String, String> {
         val options = mutableMapOf<String, String>()
         var i = 0
@@ -59,6 +86,12 @@ object CliUtils {
         value.startsWith("-") &&
             value.matches(Regex("^-?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$"))
 
+    /**
+     * Loads evaluation examples from a JSON array file.
+     *
+     * @param filepath Path to the evaluation file.
+     * @return Parsed evaluation examples.
+     */
     fun loadEvaluationData(filepath: String): List<EvalExample> {
         val json = Json { ignoreUnknownKeys = true }
         val text =
@@ -84,6 +117,14 @@ object CliUtils {
         }
     }
 
+    /**
+     * Executes an evaluation run from CLI configuration.
+     *
+     * @param config Evaluation run configuration.
+     * @param warn Callback used for non-fatal warnings.
+     * @param error Callback used for fatal errors.
+     * @return Evaluation result wrapper, or `null` when the run cannot start.
+     */
     fun runEvaluation(
         config: EvalRunConfig,
         warn: (String) -> Unit,

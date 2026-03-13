@@ -1,9 +1,19 @@
 package causalrag.causalgraph.graph
 
+/**
+ * Lightweight directed graph with weighted edges.
+ */
 class DirectedGraph {
     private val outEdges: MutableMap<String, MutableMap<String, Double>> = mutableMapOf()
     private val inEdges: MutableMap<String, MutableSet<String>> = mutableMapOf()
 
+    /**
+     * Adds or updates a directed edge.
+     *
+     * @param from Source node identifier.
+     * @param to Target node identifier.
+     * @param weight Edge weight.
+     */
     fun addEdge(
         from: String,
         to: String,
@@ -16,20 +26,64 @@ class DirectedGraph {
         inEdges.getOrPut(from) { mutableSetOf() }
     }
 
+    /**
+     * Returns the direct successors of a node.
+     *
+     * @param node Node identifier.
+     * @return Successor node identifiers.
+     */
     fun successors(node: String): Set<String> = outEdges[node]?.keys ?: emptySet()
 
+    /**
+     * Returns the direct predecessors of a node.
+     *
+     * @param node Node identifier.
+     * @return Predecessor node identifiers.
+     */
     fun predecessors(node: String): Set<String> = inEdges[node] ?: emptySet()
 
+    /**
+     * Returns all node identifiers in the graph.
+     *
+     * @return Node identifier set.
+     */
     fun nodes(): Set<String> = outEdges.keys
 
+    /**
+     * Returns the number of nodes in the graph.
+     *
+     * @return Node count.
+     */
     fun numberOfNodes(): Int = outEdges.size
 
+    /**
+     * Returns the number of edges in the graph.
+     *
+     * @return Edge count.
+     */
     fun numberOfEdges(): Int = outEdges.values.sumOf { it.size }
 
+    /**
+     * Returns the in-degree of a node.
+     *
+     * @param node Node identifier.
+     * @return Number of incoming edges.
+     */
     fun inDegree(node: String): Int = inEdges[node]?.size ?: 0
 
+    /**
+     * Returns the out-degree of a node.
+     *
+     * @param node Node identifier.
+     * @return Number of outgoing edges.
+     */
     fun outDegree(node: String): Int = outEdges[node]?.size ?: 0
 
+    /**
+     * Returns all graph edges.
+     *
+     * @return Edge list.
+     */
     fun edges(): List<Edge> {
         val result = mutableListOf<Edge>()
         for ((from, targets) in outEdges) {
@@ -40,6 +94,12 @@ class DirectedGraph {
         return result
     }
 
+    /**
+     * Builds a subgraph containing only the supplied nodes.
+     *
+     * @param nodeSet Nodes to retain.
+     * @return Induced subgraph.
+     */
     fun subgraph(nodeSet: Set<String>): DirectedGraph {
         val sub = DirectedGraph()
         for (edge in edges()) {
@@ -50,20 +110,45 @@ class DirectedGraph {
         return sub
     }
 
+    /**
+     * Returns the weight of an edge if it exists.
+     *
+     * @param from Source node identifier.
+     * @param to Target node identifier.
+     * @return Edge weight or `null` when absent.
+     */
     fun edgeWeight(
         from: String,
         to: String,
     ): Double? = outEdges[from]?.get(to)
 
+    /**
+     * Returns the maximum edge weight in the graph.
+     *
+     * @return Maximum edge weight, or `null` for an empty graph.
+     */
     fun maxEdgeWeight(): Double? = edges().maxOfOrNull { it.weight }
 
+    /**
+     * Removes all nodes and edges from the graph.
+     */
     fun clear() {
         outEdges.clear()
         inEdges.clear()
     }
 
+    /**
+     * Reports whether the graph is acyclic.
+     *
+     * @return `true` when the graph is a DAG.
+     */
     fun isDag(): Boolean = !hasCycle()
 
+    /**
+     * Reports whether the graph contains a directed cycle.
+     *
+     * @return `true` when any directed cycle exists.
+     */
     fun hasCycle(): Boolean {
         val visited = mutableSetOf<String>()
         val stack = mutableSetOf<String>()
@@ -86,6 +171,11 @@ class DirectedGraph {
         return false
     }
 
+    /**
+     * Finds weakly connected components.
+     *
+     * @return Components represented as node sets.
+     */
     fun weaklyConnectedComponents(): List<Set<String>> {
         val remaining = nodes().toMutableSet()
         val components = mutableListOf<Set<String>>()
@@ -112,6 +202,15 @@ class DirectedGraph {
         return components
     }
 
+    /**
+     * Finds simple directed paths between two nodes.
+     *
+     * @param start Start node.
+     * @param end End node.
+     * @param maxDepth Maximum path depth to explore.
+     * @param limit Maximum number of paths to return.
+     * @return Paths from [start] to [end].
+     */
     fun findPaths(
         start: String,
         end: String,
@@ -147,6 +246,13 @@ class DirectedGraph {
     }
 }
 
+/**
+ * Weighted directed edge.
+ *
+ * @property from Source node identifier.
+ * @property to Target node identifier.
+ * @property weight Edge weight.
+ */
 data class Edge(
     val from: String,
     val to: String,

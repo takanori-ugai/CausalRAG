@@ -11,6 +11,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * Tests causal reranking behavior and score ordering.
+ */
 class TestReranker {
     private lateinit var mockRetriever: CausalPathRetriever
     private lateinit var reranker: CausalPathReranker
@@ -40,6 +43,9 @@ class TestReranker {
             "Coastal cities are implementing flood protection measures.",
         )
 
+    /**
+     * Initializes the mocked retriever and reranker under test.
+     */
     @BeforeTest
     fun setUp() {
         mockRetriever = mockk()
@@ -48,6 +54,9 @@ class TestReranker {
         reranker = CausalPathReranker(mockRetriever)
     }
 
+    /**
+     * Verifies baseline reranking behavior for a simple overlap scorer.
+     */
     @Test
     fun testBaseReranker() {
         class SimpleReranker : BaseReranker("simple") {
@@ -87,6 +96,9 @@ class TestReranker {
         )
     }
 
+    /**
+     * Verifies that causal path signals promote relevant passages.
+     */
     @Test
     fun testCausalPathReranker() {
         val query = "How does climate change affect coastal areas?"
@@ -109,6 +121,9 @@ class TestReranker {
         )
     }
 
+    /**
+     * Verifies that documents containing the full causal chain rank highest.
+     */
     @Test
     fun testDocumentScoring() {
         every { mockRetriever.retrievePaths(any(), any(), any(), any()) } returns
@@ -124,6 +139,9 @@ class TestReranker {
         assertTrue(ranked.first().first.contains("climate change leads to rising sea levels", ignoreCase = true))
     }
 
+    /**
+     * Verifies that custom weights still favor passages preserving the full chain.
+     */
     @Test
     fun testRerankingWithWeights() {
         val weighted =

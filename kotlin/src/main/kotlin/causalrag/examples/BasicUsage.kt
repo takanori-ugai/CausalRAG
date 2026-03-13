@@ -2,6 +2,9 @@ package causalrag.examples
 
 import causalrag.CausalRAGPipeline
 
+/**
+ * Runs a minimal end-to-end demonstration of the CausalRAG pipeline.
+ */
 fun main() {
     val documents =
         listOf(

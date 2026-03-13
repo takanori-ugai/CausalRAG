@@ -5,6 +5,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Reranks passages based on overlap with retrieved causal nodes and paths.
+ */
 @Suppress("TooGenericExceptionCaught")
 class CausalPathReranker(
     private val retriever: CausalPathRetriever,
@@ -14,6 +17,14 @@ class CausalPathReranker(
     private val semanticMatchWeight: Double = 0.5,
     private val minNodeLength: Int = 3,
 ) : BaseReranker(name) {
+    /**
+     * Reranks candidate passages using causal node overlap, path structure, and optional semantic scores.
+     *
+     * @param query User query.
+     * @param candidates Candidate passages.
+     * @param metadata Optional candidate metadata aligned with [candidates].
+     * @return Candidates paired with normalized reranking scores.
+     */
     override fun rerank(
         query: String,
         candidates: List<String>,
@@ -101,6 +112,14 @@ class CausalPathReranker(
         return if (pathScores.isNotEmpty()) pathScores.average() else 0.0
     }
 
+    /**
+     * Explains the causal features that contributed to a candidate's score.
+     *
+     * @param query User query.
+     * @param candidate Candidate passage.
+     * @param metadata Optional candidate metadata.
+     * @return Human-readable explanation string.
+     */
     override fun getExplanation(
         query: String,
         candidate: String,

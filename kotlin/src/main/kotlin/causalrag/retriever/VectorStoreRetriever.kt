@@ -19,6 +19,9 @@ import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * In-memory vector retriever with optional JSON-based caching.
+ */
 @Suppress("TooGenericExceptionCaught")
 class VectorStoreRetriever(
     embeddingModel: String = "all-MiniLM-L6-v2",
@@ -49,6 +52,14 @@ class VectorStoreRetriever(
         }
     }
 
+    /**
+     * Indexes a corpus of texts into the vector store.
+     *
+     * @param texts Text passages to index.
+     * @param metadata Optional metadata aligned with [texts].
+     * @param ids Optional identifiers aligned with [texts].
+     * @param storeOriginal Whether to retain the original passages and metadata.
+     */
     fun indexCorpus(
         texts: List<String>,
         metadata: List<Map<String, Any>>? = null,
@@ -124,12 +135,28 @@ class VectorStoreRetriever(
         logger.info { "Indexed ${texts.size} passages" }
     }
 
+    /**
+     * Searches the indexed corpus and returns matching passages only.
+     *
+     * @param query User query.
+     * @param topK Maximum number of matches to return.
+     * @param threshold Optional minimum cosine similarity.
+     * @return Matching passages ordered by score.
+     */
     fun search(
         query: String,
         topK: Int = 5,
         threshold: Double? = null,
     ): List<String> = searchIndexed(query, topK, threshold).map { it.passage }
 
+    /**
+     * Searches the indexed corpus and returns passage-score pairs.
+     *
+     * @param query User query.
+     * @param topK Maximum number of matches to return.
+     * @param threshold Optional minimum cosine similarity.
+     * @return Matching passages with similarity scores.
+     */
     fun searchWithScores(
         query: String,
         topK: Int = 5,
@@ -166,6 +193,14 @@ class VectorStoreRetriever(
         }
     }
 
+    /**
+     * Searches the indexed corpus and returns passages with metadata.
+     *
+     * @param query User query.
+     * @param topK Maximum number of matches to return.
+     * @param threshold Optional minimum cosine similarity.
+     * @return Result maps including passage text, metadata, score, and rank.
+     */
     fun searchWithMetadata(
         query: String,
         topK: Int = 5,
@@ -217,6 +252,12 @@ class VectorStoreRetriever(
         }
     }
 
+    /**
+     * Loads cached vectors and metadata from disk.
+     *
+     * @param cacheDir Directory containing `vectors.json` and `metadata.json`.
+     * @return `true` when the cache is loaded successfully.
+     */
     fun loadCached(cacheDir: String): Boolean {
         val vectorsPath = Path.of(cacheDir, "vectors.json")
         val metaPath = Path.of(cacheDir, "metadata.json")
@@ -262,6 +303,12 @@ class VectorStoreRetriever(
         }
     }
 
+    /**
+     * Saves the current vector index to disk.
+     *
+     * @param dir Destination directory.
+     * @return `true` when the index is saved successfully.
+     */
     fun saveIndex(dir: String): Boolean =
         try {
             if (vectors.isEmpty() || passages.isEmpty()) {
@@ -280,8 +327,19 @@ class VectorStoreRetriever(
             false
         }
 
+    /**
+     * Loads a previously saved vector index from disk.
+     *
+     * @param dir Source directory.
+     * @return `true` when the index is loaded successfully.
+     */
     fun loadIndex(dir: String): Boolean = loadCached(dir)
 
+    /**
+     * Returns the passages currently stored in the vector index.
+     *
+     * @return Indexed passages in storage order.
+     */
     fun getPassages(): List<String> = passages.toList()
 
     private fun mapToJson(map: Map<String, Any>): JsonObject =

@@ -10,6 +10,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * Tests causal graph construction, persistence, and path retrieval.
+ */
 class TestCausalGraph {
     private lateinit var builder: CausalGraphBuilder
     private lateinit var retriever: CausalPathRetriever
@@ -22,6 +25,9 @@ class TestCausalGraph {
             "Coastal flooding causes population displacement.",
         )
 
+    /**
+     * Initializes a small graph and retriever for each test.
+     */
     @BeforeTest
     fun setUp() {
         builder = CausalGraphBuilder(extractorMethod = "rule")
@@ -30,11 +36,17 @@ class TestCausalGraph {
         tempFile = Files.createTempFile("causalrag-graph", ".json")
     }
 
+    /**
+     * Cleans up temporary files created during testing.
+     */
     @AfterTest
     fun tearDown() {
         Files.deleteIfExists(tempFile)
     }
 
+    /**
+     * Verifies that causal edges are extracted into the graph.
+     */
     @Test
     fun testGraphConstruction() {
         val graph = builder.getGraph()
@@ -46,6 +58,9 @@ class TestCausalGraph {
         assertTrue(hasRelation("coastal flooding", "population displacement"))
     }
 
+    /**
+     * Verifies that graphs can be saved and loaded without losing structure.
+     */
     @Test
     fun testSaveLoadGraph() {
         builder.save(tempFile.toString())
@@ -64,6 +79,9 @@ class TestCausalGraph {
         assertEquals(original.numberOfEdges(), reloaded.numberOfEdges(), "Edge count mismatch after reload")
     }
 
+    /**
+     * Verifies that the retriever can recover causal paths from the graph.
+     */
     @Test
     fun testCausalPathRetrieval() {
         val paths = retriever.retrievePaths("What are the effects of climate change?", maxPaths = 3)
@@ -75,6 +93,9 @@ class TestCausalGraph {
         assertTrue(hasClimatePath, "Should find paths starting with climate change")
     }
 
+    /**
+     * Verifies that relevant nodes are returned for a query.
+     */
     @Test
     fun testQueryRelevance() {
         val nodes =

@@ -5,6 +5,9 @@ import kotlin.math.ln
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * BM25 keyword retriever for lexical passage matching.
+ */
 class Bm25Retriever(
     private val k1: Double = 1.5,
     private val b: Double = 0.75,
@@ -17,6 +20,12 @@ class Bm25Retriever(
     private var avgDocLength: Double = 0.0
     private var numDocs: Int = 0
 
+    /**
+     * Tokenizes text into lowercase word tokens.
+     *
+     * @param text Input text.
+     * @return Token list.
+     */
     override fun tokenize(text: String): List<String> = WORD_REGEX.findAll(text.lowercase()).map { it.value }.toList()
 
     companion object {
@@ -50,12 +59,25 @@ class Bm25Retriever(
         logger.info { "Indexed $numDocs documents for BM25" }
     }
 
+    /**
+     * Indexes the provided documents for BM25 scoring.
+     *
+     * @param documents Documents to index.
+     * @return `true` when indexing succeeds.
+     */
     override fun indexCorpus(documents: List<String>): Boolean {
         if (documents.isEmpty()) return false
         indexDocuments(documents)
         return true
     }
 
+    /**
+     * Retrieves top matching passages using BM25 scoring.
+     *
+     * @param query User query.
+     * @param topK Maximum number of results to return.
+     * @return Result maps including passage text, score, and rank.
+     */
     override fun retrieve(
         query: String,
         topK: Int,
@@ -95,6 +117,11 @@ class Bm25Retriever(
         }
     }
 
+    /**
+     * Returns lightweight retriever statistics.
+     *
+     * @return Diagnostic key-value pairs.
+     */
     override fun getStats(): Map<String, Any> =
         mapOf(
             "name" to name,
