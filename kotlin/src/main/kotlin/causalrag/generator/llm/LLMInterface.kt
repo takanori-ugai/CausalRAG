@@ -39,11 +39,12 @@ class LLMInterface(
      * Generates a chat completion for the supplied prompt.
      *
      * @param prompt User prompt.
-     * @param temperature Sampling temperature.
-     * @param maxTokens Maximum completion token budget.
-     * @param stream Whether streaming was requested.
-     * @param jsonMode Whether to request JSON output when supported.
-     * @param jsonArrayMode Whether the prompt expects a JSON array response.
+     * @param temperature Sampling temperature. Currently applied only to the OpenAI provider.
+     * @param maxTokens Maximum completion token budget. Currently applied only to the OpenAI provider.
+     * @param stream Whether streaming was requested. Streaming is currently ignored for all providers.
+     * @param jsonMode Whether to request JSON output when supported. Currently only the OpenAI provider uses this flag.
+     * @param jsonArrayMode Whether the prompt expects a JSON array response. For OpenAI this only affects prompt handling;
+     * response format remains provider-limited, and other providers currently ignore it.
      * @return Model response text.
      */
     fun generate(

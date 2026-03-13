@@ -10,14 +10,19 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Retrieves graph nodes and paths relevant to a natural-language query.
+ *
+ * @param builder Causal graph builder that provides graph structure, node text, and embeddings.
+ * @param similarNodeThreshold Similarity threshold for adding semantically related nodes during path expansion.
  */
 @Suppress("TooGenericExceptionCaught")
 class CausalPathRetriever(
     private val builder: CausalGraphBuilder,
     private val similarNodeThreshold: Double = 0.8,
 ) {
-    private val graph: DirectedGraph = builder.getGraph()
-    private val nodeEmbeddings = builder.nodeEmbeddings
+    private val graph: DirectedGraph
+        get() = builder.getGraph()
+    private val nodeEmbeddings: Map<String, DoubleArray>
+        get() = builder.nodeEmbeddings
     private val nodeText = builder.nodeText
     private val encoder: EmbeddingModel? = builder.getEncoder()
 

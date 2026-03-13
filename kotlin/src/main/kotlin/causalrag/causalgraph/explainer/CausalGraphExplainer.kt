@@ -13,6 +13,9 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Produces human-readable explanations and visualizations for causal graphs.
+ *
+ * @param graph Directed graph instance to explain.
+ * @param nodeText Optional mapping from node identifiers to human-readable labels.
  */
 class CausalGraphExplainer(
     private val graph: DirectedGraph,
@@ -43,12 +46,12 @@ class CausalGraphExplainer(
                 val tgtName = nodeText[tgt] ?: tgt
                 for ((start, end, label) in listOf(
                     Triple(src, tgt, "Effects of $srcName on $tgtName"),
-                    Triple(tgt, src, "Causes of $tgtName from $srcName"),
+                    Triple(tgt, src, "Effects of $tgtName on $srcName"),
                 )) {
-                    val paths = graph.findPaths(start, end, maxPathLength)
+                    val paths = graph.findPaths(start, end, maxPathLength, limit = 3)
                     if (paths.isNotEmpty()) {
                         explanation.add("\n$label:")
-                        for ((idx, path) in paths.take(3).withIndex()) {
+                        for ((idx, path) in paths.withIndex()) {
                             val segments = mutableListOf<String>()
                             for (j in 0 until path.size - 1) {
                                 val n1 = nodeText[path[j]] ?: path[j]

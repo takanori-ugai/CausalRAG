@@ -36,6 +36,9 @@ data class CausalTriple(
 
 /**
  * Extracts causal triples from free text using rule-based, LLM-based, or hybrid logic.
+ *
+ * @param method Extraction method: `"rule"`, `"llm"`, or `"hybrid"`.
+ * @param llmInterface Optional LLM interface used by the `"llm"` and `"hybrid"` methods.
  */
 @Suppress("TooGenericExceptionCaught")
 class CausalTripleExtractor(
@@ -410,6 +413,16 @@ CAUSAL RELATIONSHIPS:"""
 
 /**
  * Builds and persists a causal graph from extracted causal triples.
+ *
+ * @param modelName Default embedding model name used when no embedding model is provided.
+ * @param normalizeNodes Whether to merge similar node text into canonical graph nodes.
+ * @param confidenceThreshold Minimum confidence required before an extracted triple is added.
+ * @param nodeMergeSimilarityThreshold Similarity threshold used when deciding whether to merge nodes.
+ * @param extractorMethod Triple extraction method passed to [CausalTripleExtractor].
+ * @param llmInterface Optional LLM interface used for extraction and summarization.
+ * @param graphPath Optional path to a previously saved graph to load during initialization.
+ * @param embeddingModel Optional pre-configured embedding model to use instead of creating one.
+ * @param embeddingApiKey Optional API key used when creating the default embedding model.
  */
 @Suppress("TooGenericExceptionCaught")
 class CausalGraphBuilder(
@@ -438,7 +451,8 @@ class CausalGraphBuilder(
     /**
      * Embeddings for graph nodes keyed by node identifier.
      */
-    val nodeEmbeddings: Map<String, DoubleArray> get() = _nodeEmbeddings
+    val nodeEmbeddings: Map<String, DoubleArray>
+        get() = _nodeEmbeddings.mapValues { (_, embedding) -> embedding.copyOf() }
     private val extractor = CausalTripleExtractor(method = extractorMethod, llmInterface = llmInterface)
 
     init {
@@ -467,7 +481,8 @@ class CausalGraphBuilder(
                 _nodeText[causeId] = triple.cause
                 _nodeText[effectId] = triple.effect
             }
-            graph.addEdge(causeId, effectId, confidence)
+            val existingWeight = graph.edgeWeight(causeId, effectId)
+            graph.addEdge(causeId, effectId, max(existingWeight ?: 0.0, confidence))
             if (encoder != null) {
                 for (nodeId in listOf(causeId, effectId)) {
                     if (!_nodeEmbeddings.containsKey(nodeId)) {
@@ -540,9 +555,9 @@ class CausalGraphBuilder(
     /**
      * Returns the underlying directed graph.
      *
-     * @return Current graph instance.
+     * @return Snapshot of the current graph state.
      */
-    fun getGraph(): DirectedGraph = graph
+    fun getGraph(): DirectedGraph = graph.copy()
 
     /**
      * Returns the canonical label and known variants for a node.
@@ -561,7 +576,7 @@ class CausalGraphBuilder(
      * @param nodeId Node identifier.
      * @return Embedding vector or `null`.
      */
-    fun getEmbedding(nodeId: String): DoubleArray? = _nodeEmbeddings[nodeId]
+    fun getEmbedding(nodeId: String): DoubleArray? = _nodeEmbeddings[nodeId]?.copyOf()
 
     /**
      * Returns the encoder used by the builder.

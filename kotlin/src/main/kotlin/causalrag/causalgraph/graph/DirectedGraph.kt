@@ -102,8 +102,13 @@ class DirectedGraph {
      */
     fun subgraph(nodeSet: Set<String>): DirectedGraph {
         val sub = DirectedGraph()
+        val retained = nodeSet.intersect(nodes())
+        for (node in retained) {
+            sub.outEdges.getOrPut(node) { mutableMapOf() }
+            sub.inEdges.getOrPut(node) { mutableSetOf() }
+        }
         for (edge in edges()) {
-            if (edge.from in nodeSet && edge.to in nodeSet) {
+            if (edge.from in retained && edge.to in retained) {
                 sub.addEdge(edge.from, edge.to, edge.weight)
             }
         }
@@ -135,6 +140,23 @@ class DirectedGraph {
     fun clear() {
         outEdges.clear()
         inEdges.clear()
+    }
+
+    /**
+     * Creates a structural copy of the graph.
+     *
+     * @return Independent graph copy with the same nodes and edges.
+     */
+    fun copy(): DirectedGraph {
+        val clone = DirectedGraph()
+        for (node in nodes()) {
+            clone.outEdges.getOrPut(node) { mutableMapOf() }
+            clone.inEdges.getOrPut(node) { mutableSetOf() }
+        }
+        for (edge in edges()) {
+            clone.addEdge(edge.from, edge.to, edge.weight)
+        }
+        return clone
     }
 
     /**

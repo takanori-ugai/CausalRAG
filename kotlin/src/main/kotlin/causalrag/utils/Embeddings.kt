@@ -39,7 +39,7 @@ class LangChain4jEmbeddingModel(
 /**
  * Lightweight fallback embedding model based on token hashing.
  *
- * @property dimension Output vector size.
+ * @param dimension Output vector size.
  */
 class SimpleHashEmbedding(
     private val dimension: Int = 384,

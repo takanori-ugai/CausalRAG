@@ -9,6 +9,17 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Combines semantic, causal, and optional BM25 retrieval signals.
+ *
+ * @param vectorRetriever Primary semantic retriever used to fetch candidate passages.
+ * @param graphRetriever Retriever that provides causal nodes and paths for query-aware reranking.
+ * @param semanticWeight Weight assigned to the semantic retrieval score before normalization.
+ * @param causalWeight Weight assigned to the causal matching score before normalization.
+ * @param bm25Weight Weight assigned to the BM25 keyword score before normalization.
+ * @param bm25Retriever Optional BM25 retriever used when lexical scoring is enabled.
+ * @param rerankingFactor Multiplier controlling how many semantic candidates are fetched before reranking.
+ * @param minCausalMatches Minimum number of matched causal nodes required for a passage to survive filtering.
+ * @param cacheResults Whether query results should be cached in memory.
+ * @param cacheMaxEntries Maximum number of cached query entries when caching is enabled.
  */
 @Suppress("TooGenericExceptionCaught")
 class HybridRetriever(
@@ -165,8 +176,16 @@ class HybridRetriever(
                 emptyMap()
             }
 
-        if (semanticResults.isEmpty()) {
-            logger.warn { "No semantic results found for query" }
+        val candidates = linkedMapOf<String, Double>()
+        semanticResults.forEach { (passage, semanticScore) ->
+            candidates[passage] = semanticScore
+        }
+        bm25Scores.keys.forEach { passage ->
+            candidates.putIfAbsent(passage, 0.0)
+        }
+
+        if (candidates.isEmpty()) {
+            logger.warn { "No retrieval results found for query" }
             return emptyList()
         }
 
@@ -186,7 +205,7 @@ class HybridRetriever(
             }
 
         val scoredResults = mutableListOf<Map<String, Any>>()
-        for ((passage, semanticScore) in semanticResults) {
+        for ((passage, semanticScore) in candidates) {
             val keywordScore = bm25Scores[passage] ?: 0.0
             val (score, details) = scorePassage(passage, pathNodes, causalPaths, semanticScore, keywordScore)
             val matchedNodes = details["matched_nodes"] as? List<*> ?: emptyList<Any>()
@@ -211,6 +230,10 @@ class HybridRetriever(
 
     /**
      * Explains how the hybrid retriever scored a passage for a query.
+     *
+     * Detailed explanations are only available after [retrieveWithDetails], [retrieveWithScores], or [retrieve]
+     * has populated the internal cache for the same query. When caching is disabled, this method always falls back
+     * to a generic explanation.
      *
      * @param query User query.
      * @param passage Passage to explain.

@@ -3,6 +3,9 @@ package causalrag
 import causalrag.causalgraph.retriever.CausalPathRetriever
 import causalrag.reranker.BaseReranker
 import causalrag.reranker.CausalPathReranker
+import causalrag.retriever.Bm25Retriever
+import causalrag.retriever.HybridRetriever
+import causalrag.retriever.VectorStoreRetriever
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -163,5 +166,48 @@ class TestReranker {
 
         val ranked = weighted.rerank("How does climate change cause flooding?", docs)
         assertTrue(ranked.first().first.contains("climate change leads to rising sea levels", ignoreCase = true))
+    }
+
+    /**
+     * Verifies that BM25 returns no passages when a query has no lexical matches.
+     */
+    @Test
+    fun testBm25ReturnsNoResultsForMiss() {
+        val retriever = Bm25Retriever()
+        retriever.indexCorpus(testDocs)
+
+        val results = retriever.retrieve("quasar nebula pulsar", topK = 3)
+
+        assertTrue(results.isEmpty())
+    }
+
+    /**
+     * Verifies that BM25-only candidates can still be returned when semantic retrieval is empty.
+     */
+    @Test
+    fun testHybridRetrieverSupportsBm25Fallback() {
+        val vectorRetriever = mockk<VectorStoreRetriever>()
+        val graphRetriever = mockk<CausalPathRetriever>()
+        val bm25Retriever = Bm25Retriever()
+        bm25Retriever.indexCorpus(testDocs)
+
+        every { vectorRetriever.searchWithScores(any(), any(), any()) } returns emptyList()
+        every { graphRetriever.retrievePathNodes(any(), any(), any(), any()) } returns emptyList()
+        every { graphRetriever.retrievePaths(any(), any(), any(), any()) } returns emptyList()
+
+        val retriever =
+            HybridRetriever(
+                vectorRetriever = vectorRetriever,
+                graphRetriever = graphRetriever,
+                semanticWeight = 0.0,
+                causalWeight = 0.0,
+                bm25Weight = 1.0,
+                bm25Retriever = bm25Retriever,
+            )
+
+        val results = retriever.retrieveWithDetails("climate change", topK = 3)
+
+        assertTrue(results.isNotEmpty())
+        assertTrue(results.any { (it["passage"] as String).contains("Climate", ignoreCase = true) })
     }
 }

@@ -7,6 +7,13 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Reranks passages based on overlap with retrieved causal nodes and paths.
+ *
+ * @param retriever Retriever used to obtain causal nodes and paths for the query.
+ * @param name Reranker name exposed through the [BaseReranker] interface.
+ * @param nodeMatchWeight Weight applied to node-overlap matches in the final score.
+ * @param pathMatchWeight Weight applied to causal path-structure matches in the final score.
+ * @param semanticMatchWeight Weight applied to the incoming semantic score from candidate metadata.
+ * @param minNodeLength Minimum node text length required before a node is considered for matching.
  */
 @Suppress("TooGenericExceptionCaught")
 class CausalPathReranker(

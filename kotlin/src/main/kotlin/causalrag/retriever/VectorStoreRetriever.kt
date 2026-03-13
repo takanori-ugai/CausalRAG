@@ -18,13 +18,31 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
+private const val DEFAULT_LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+private const val DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+private const val DEFAULT_HASH_DIMENSION = 384
+private val OPENAI_EMBEDDING_DIMENSIONS =
+    mapOf(
+        "text-embedding-3-small" to 1536,
+        "text-embedding-3-large" to 3072,
+        "text-embedding-ada-002" to 1536,
+    )
 
 /**
  * In-memory vector retriever with optional JSON-based caching.
+ *
+ * @param embeddingModel Embedding model name used when creating an encoder internally.
+ * @param backend Vector store backend label; the current implementation stores vectors in memory.
+ * @param dimension Optional embedding dimension for fallback hash-based embeddings.
+ * @param batchSize Number of texts encoded per batch during indexing.
+ * @param cacheDir Optional directory used to persist cached vectors and metadata.
+ * @param indexPath Optional path to a previously cached index loaded during initialization.
+ * @param embeddingApiKey Optional API key used when creating an external embedding model.
+ * @param embeddingModelOverride Optional pre-configured [EmbeddingModel] used instead of creating one.
  */
 @Suppress("TooGenericExceptionCaught")
 class VectorStoreRetriever(
-    embeddingModel: String = "all-MiniLM-L6-v2",
+    embeddingModel: String = DEFAULT_LOCAL_EMBEDDING_MODEL,
     private val backend: String = "memory",
     private val dimension: Int? = null,
     private val batchSize: Int = 32,
@@ -33,12 +51,19 @@ class VectorStoreRetriever(
     embeddingApiKey: String? = null,
     embeddingModelOverride: EmbeddingModel? = null,
 ) {
+    private val resolvedEmbeddingModel =
+        resolveEmbeddingModelName(
+            configuredModel = embeddingModel,
+            embeddingApiKey = embeddingApiKey,
+            embeddingModelOverride = embeddingModelOverride,
+        )
+    private val expectedVectorDimension = resolveExpectedVectorDimension(resolvedEmbeddingModel, embeddingApiKey)
     private val encoder: EmbeddingModel? =
         embeddingModelOverride ?: run {
             if (!embeddingApiKey.isNullOrBlank()) {
-                EmbeddingModelFactory.createOpenAi(embeddingModel, embeddingApiKey)
+                EmbeddingModelFactory.createOpenAi(resolvedEmbeddingModel, embeddingApiKey)
             } else {
-                SimpleHashEmbedding(dimension ?: 384)
+                SimpleHashEmbedding(expectedVectorDimension ?: DEFAULT_HASH_DIMENSION)
             }
         }
     private val vectors = mutableListOf<DoubleArray>()
@@ -105,21 +130,16 @@ class VectorStoreRetriever(
                 }
             }
 
-        if (storeOriginal) {
-            passages.clear()
-            passages.addAll(texts)
-            this.metadata.clear()
-            this.metadata.addAll(normalizedMetadata)
-        } else if (passages.size != texts.size) {
+        if (!storeOriginal) {
             logger.warn {
-                "storeOriginal=false but passage count (${passages.size}) != texts (${texts.size}); " +
-                    "updating passages to keep vectors aligned."
+                "storeOriginal=false is not compatible with the current search API; " +
+                    "retaining passages to keep hits aligned with vectors."
             }
-            passages.clear()
-            passages.addAll(texts)
-            this.metadata.clear()
-            this.metadata.addAll(normalizedMetadata)
         }
+        passages.clear()
+        passages.addAll(texts)
+        this.metadata.clear()
+        this.metadata.addAll(normalizedMetadata)
 
         vectors.clear()
         for (i in texts.indices step batchSize) {
@@ -180,6 +200,17 @@ class VectorStoreRetriever(
         }
         if (vectors.isEmpty()) return emptyList()
         val qEmb = encoder.encode(query)
+        if (passages.size != vectors.size) {
+            logger.error { "Indexed data is inconsistent: vectors=${vectors.size}, passages=${passages.size}" }
+            return emptyList()
+        }
+        val vectorDimension = vectors.firstOrNull()?.size ?: return emptyList()
+        if (qEmb.size != vectorDimension) {
+            logger.error {
+                "Query embedding dimension (${qEmb.size}) does not match indexed vectors ($vectorDimension)"
+            }
+            return emptyList()
+        }
         val scores = mutableListOf<Pair<Int, Double>>()
         for (i in vectors.indices) {
             val sim = cosineSimilarity(qEmb, vectors[i])
@@ -226,7 +257,7 @@ class VectorStoreRetriever(
         dir: String,
         ids: List<String>,
         metadata: List<Map<String, Any>>,
-    ) {
+    ): Boolean =
         try {
             Files.createDirectories(Path.of(dir))
             val json = Json { prettyPrint = true }
@@ -241,16 +272,21 @@ class VectorStoreRetriever(
                     put("ids", buildJsonArray { ids.forEach { add(JsonPrimitive(it)) } })
                     put("metadata", buildJsonArray { metadata.forEach { add(mapToJson(it)) } })
                     put("passages", buildJsonArray { passages.forEach { add(JsonPrimitive(it)) } })
+                    put("backend", JsonPrimitive(backend))
+                    put("embedding_model", JsonPrimitive(resolvedEmbeddingModel))
+                    put("vector_dimension", JsonPrimitive(vectors.firstOrNull()?.size ?: 0))
                 }
             Files.writeString(Path.of(dir, "vectors.json"), json.encodeToString(JsonElement.serializer(), vectorsJson))
             Files.writeString(Path.of(dir, "metadata.json"), json.encodeToString(JsonElement.serializer(), metaJson))
             logger.info { "Cached vectors to $dir" }
+            true
         } catch (ex: IOException) {
             logger.error(ex) { "Error caching vectors" }
+            false
         } catch (ex: RuntimeException) {
             logger.error(ex) { "Error caching vectors" }
+            false
         }
-    }
 
     /**
      * Loads cached vectors and metadata from disk.
@@ -270,7 +306,7 @@ class VectorStoreRetriever(
             val vectorsJson = json.parseToJsonElement(Files.readString(vectorsPath)) as? JsonArray
             val metaJson = json.parseToJsonElement(Files.readString(metaPath)) as? JsonObject
             if (vectorsJson == null || metaJson == null) return false
-            vectors.clear()
+            clearIndex()
             for (vecElement in vectorsJson) {
                 if (vecElement is JsonArray) {
                     vectors.add(
@@ -280,8 +316,6 @@ class VectorStoreRetriever(
                     )
                 }
             }
-            passages.clear()
-            metadata.clear()
             val passagesJson = metaJson["passages"] as? JsonArray ?: JsonArray(emptyList())
             for (p in passagesJson) {
                 passages.add((p as? JsonPrimitive)?.content.orEmpty())
@@ -292,13 +326,42 @@ class VectorStoreRetriever(
                     metadata.add(jsonObjectToMap(m))
                 }
             }
+            val vectorSizes = vectors.map { it.size }.toSet()
+            if (vectorSizes.size > 1) {
+                logger.error { "Cached index is inconsistent: vectors contain multiple dimensions $vectorSizes" }
+                clearIndex()
+                return false
+            }
+            val actualVectorDimension = vectorSizes.firstOrNull() ?: 0
+            val cachedVectorDimension = (metaJson["vector_dimension"] as? JsonPrimitive)?.content?.toIntOrNull()
+            if (cachedVectorDimension != null && cachedVectorDimension != actualVectorDimension) {
+                logger.error {
+                    "Cached index is inconsistent: metadata dimension=$cachedVectorDimension, actual=$actualVectorDimension"
+                }
+                clearIndex()
+                return false
+            }
+            if (passages.size != vectors.size) {
+                logger.error { "Cached index is inconsistent: vectors=${vectors.size}, passages=${passages.size}" }
+                clearIndex()
+                return false
+            }
+            if (expectedVectorDimension != null && actualVectorDimension != expectedVectorDimension) {
+                logger.error {
+                    "Cached index dimension ($actualVectorDimension) does not match retriever expectation ($expectedVectorDimension)"
+                }
+                clearIndex()
+                return false
+            }
             logger.info { "Loaded ${vectors.size} vectors from cache" }
             true
         } catch (ex: IOException) {
             logger.error(ex) { "Error loading cached vectors" }
+            clearIndex()
             false
         } catch (ex: RuntimeException) {
             logger.error(ex) { "Error loading cached vectors" }
+            clearIndex()
             false
         }
     }
@@ -317,7 +380,6 @@ class VectorStoreRetriever(
             } else {
                 val ids = passages.indices.map { it.toString() }
                 cacheVectors(dir, ids, metadata)
-                true
             }
         } catch (ex: IOException) {
             logger.error(ex) { "Error saving index" }
@@ -341,6 +403,12 @@ class VectorStoreRetriever(
      * @return Indexed passages in storage order.
      */
     fun getPassages(): List<String> = passages.toList()
+
+    private fun clearIndex() {
+        vectors.clear()
+        passages.clear()
+        metadata.clear()
+    }
 
     private fun mapToJson(map: Map<String, Any>): JsonObject =
         buildJsonObject {
@@ -370,4 +438,32 @@ class VectorStoreRetriever(
         }
         return result
     }
+
+    private fun resolveEmbeddingModelName(
+        configuredModel: String,
+        embeddingApiKey: String?,
+        embeddingModelOverride: EmbeddingModel?,
+    ): String {
+        if (embeddingModelOverride != null || embeddingApiKey.isNullOrBlank()) {
+            return configuredModel
+        }
+        return if (configuredModel == DEFAULT_LOCAL_EMBEDDING_MODEL) {
+            logger.info {
+                "Using $DEFAULT_OPENAI_EMBEDDING_MODEL for OpenAI embeddings instead of local default $DEFAULT_LOCAL_EMBEDDING_MODEL"
+            }
+            DEFAULT_OPENAI_EMBEDDING_MODEL
+        } else {
+            configuredModel
+        }
+    }
+
+    private fun resolveExpectedVectorDimension(
+        modelName: String,
+        embeddingApiKey: String?,
+    ): Int? =
+        if (embeddingApiKey.isNullOrBlank()) {
+            dimension ?: DEFAULT_HASH_DIMENSION
+        } else {
+            OPENAI_EMBEDDING_DIMENSIONS[modelName]
+        }
 }

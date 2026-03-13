@@ -44,6 +44,10 @@ data class EvalExample(
 
 /**
  * Evaluates generated answers and causal reasoning quality.
+ *
+ * @param llmInterface Optional LLM interface used for evaluation-driven scoring.
+ * @param metrics Optional list of metric names to compute; defaults are used when omitted.
+ * @param resultsDir Optional directory where evaluation reports are persisted.
  */
 class CausalEvaluator(
     private val llmInterface: LLMInterface? = null,

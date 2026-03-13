@@ -1,6 +1,8 @@
 package causalrag
 
 import causalrag.causalgraph.builder.CausalGraphBuilder
+import causalrag.causalgraph.builder.CausalTriple
+import causalrag.causalgraph.graph.DirectedGraph
 import causalrag.causalgraph.retriever.CausalPathRetriever
 import java.nio.file.Files
 import java.nio.file.Path
@@ -8,6 +10,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -110,6 +113,77 @@ class TestCausalGraph {
         for (term in required) {
             assertTrue(labels.any { it.lowercase().contains(term) }, "Should find $term in relevant nodes")
         }
+    }
+
+    /**
+     * Verifies that induced subgraphs retain selected isolated nodes.
+     */
+    @Test
+    fun testSubgraphPreservesIsolatedNodes() {
+        val graph = DirectedGraph()
+        graph.addEdge("a", "b", 1.0)
+        graph.addEdge("b", "c", 1.0)
+        graph.addEdge("isolated", "isolated-target", 1.0)
+
+        val subgraph = graph.subgraph(setOf("a", "b", "isolated-target"))
+
+        assertEquals(setOf("a", "b", "isolated-target"), subgraph.nodes())
+        assertEquals(1, subgraph.numberOfEdges())
+        assertTrue(subgraph.edgeWeight("a", "b") != null)
+        assertEquals(0, subgraph.inDegree("isolated-target"))
+        assertEquals(0, subgraph.outDegree("isolated-target"))
+    }
+
+    /**
+     * Verifies that node embedding accessors return defensive copies.
+     */
+    @Test
+    fun testEmbeddingAccessorsDoNotExposeMutableState() {
+        val anyNodeId = builder.nodeEmbeddings.keys.first()
+
+        val fromGetter = assertNotNull(builder.getEmbedding(anyNodeId))
+        val getterOriginal = fromGetter.copyOf()
+        fromGetter[0] += 123.0
+        assertTrue(builder.getEmbedding(anyNodeId)!!.contentEquals(getterOriginal))
+
+        val fromMap = assertNotNull(builder.nodeEmbeddings[anyNodeId])
+        val mapOriginal = fromMap.copyOf()
+        fromMap[0] -= 456.0
+        assertTrue(builder.nodeEmbeddings[anyNodeId]!!.contentEquals(mapOriginal))
+    }
+
+    /**
+     * Verifies that repeated triples preserve the highest observed confidence.
+     */
+    @Test
+    fun testDuplicateTriplesKeepHighestConfidence() {
+        val localBuilder = CausalGraphBuilder(normalizeNodes = false, extractorMethod = "rule")
+        localBuilder.addTriples(
+            listOf(
+                CausalTriple("rain", "flooding", 0.9),
+                CausalTriple("rain", "flooding", 0.6),
+            ),
+        )
+
+        val weight = localBuilder.getGraph().edgeWeight("rain", "flooding")
+
+        assertEquals(0.9, weight)
+        assertEquals(1, localBuilder.getGraph().numberOfEdges())
+    }
+
+    /**
+     * Verifies that mutating a returned graph snapshot does not affect builder state.
+     */
+    @Test
+    fun testGetGraphReturnsDefensiveCopy() {
+        val snapshot = builder.getGraph()
+        val originalEdgeCount = snapshot.numberOfEdges()
+
+        snapshot.addEdge("rogue-cause", "rogue-effect", 1.0)
+
+        assertEquals(originalEdgeCount + 1, snapshot.numberOfEdges())
+        assertEquals(originalEdgeCount, builder.getGraph().numberOfEdges())
+        assertTrue(builder.describeGraph().contains("rogue-cause").not())
     }
 
     private fun hasRelation(

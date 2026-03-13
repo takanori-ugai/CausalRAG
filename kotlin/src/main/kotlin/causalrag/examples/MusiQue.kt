@@ -71,8 +71,18 @@ object MusiQue {
     /**
      * Entry point for MusiQue evaluation.
      *
-     * @param args Command-line arguments.
+     * Configuration is read from environment variables:
+     * - `LLM_PROVIDER`: LLM provider name (default: `"openai"`)
+     * - `OPENAI_API_KEY`: API key for the OpenAI provider
+     * - `LLM_MODEL`: Model name (default: `"gpt-4o-mini"`)
+     * - `EMBEDDING_MODEL`: Embedding model (default: `"text-embedding-3-small"`)
+     * - `LLM_BASE_URL`: Optional base URL override
+     * - `MUSIQUE_LIMIT`: Optional limit on samples to process
+     * - `MUSIQUE_PARALLELISM`: Concurrent processing limit (default: `5`)
+     *
+     * @param args Command-line arguments (currently unused).
      */
+    @Suppress("TooGenericExceptionCaught")
     @JvmStatic
     fun main(args: Array<String>) {
         val dataPath = Path.of("data/musique_ans_v1.0_train-200.jsonl")

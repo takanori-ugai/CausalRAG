@@ -7,6 +7,10 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * BM25 keyword retriever for lexical passage matching.
+ *
+ * @param k1 BM25 term-frequency saturation parameter.
+ * @param b BM25 document-length normalization parameter.
+ * @param name Retriever name exposed through the [KeywordRetriever] interface.
  */
 class Bm25Retriever(
     private val k1: Double = 1.5,
@@ -105,6 +109,7 @@ class Bm25Retriever(
         val ranked =
             scores
                 .mapIndexed { idx, score -> idx to score }
+                .filter { it.second > 0.0 }
                 .sortedByDescending { it.second }
                 .take(topK)
 
