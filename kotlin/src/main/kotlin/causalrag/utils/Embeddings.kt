@@ -2,6 +2,9 @@ package causalrag.utils
 
 import kotlin.math.sqrt
 
+private const val DEFAULT_LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+private const val DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
 /**
  * Minimal embedding model contract used across retrieval and graph components.
  */
@@ -44,6 +47,10 @@ class LangChain4jEmbeddingModel(
 class SimpleHashEmbedding(
     private val dimension: Int = 384,
 ) : EmbeddingModel {
+    init {
+        require(dimension > 0) { "dimension must be > 0" }
+    }
+
     override fun encode(text: String): DoubleArray {
         val vector = DoubleArray(dimension)
         val tokens = tokenize(text)
@@ -111,7 +118,13 @@ object EmbeddingModelFactory {
         apiKey: String? = System.getenv("OPENAI_API_KEY"),
     ): EmbeddingModel =
         if (!apiKey.isNullOrBlank()) {
-            createOpenAi(modelName, apiKey)
+            val resolvedModelName =
+                if (modelName == DEFAULT_LOCAL_EMBEDDING_MODEL) {
+                    DEFAULT_OPENAI_EMBEDDING_MODEL
+                } else {
+                    modelName
+                }
+            createOpenAi(resolvedModelName, apiKey)
         } else {
             SimpleHashEmbedding()
         }

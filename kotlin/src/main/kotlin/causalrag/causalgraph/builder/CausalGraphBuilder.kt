@@ -126,15 +126,7 @@ class CausalTripleExtractor(
                 val ruleTriples = deduplicateTriples(ruleBasedExtraction(text))
                 if (llmInterface != null) {
                     val llmTriples = llmBasedExtraction(text)
-                    val existing = ruleTriples.map { it.cause.lowercase() + "|" + it.effect.lowercase() }.toSet()
-                    val combined = ruleTriples.toMutableList()
-                    for (triple in llmTriples) {
-                        val key = triple.cause.lowercase() + "|" + triple.effect.lowercase()
-                        if (key !in existing) {
-                            combined.add(triple)
-                        }
-                    }
-                    combined
+                    deduplicateTriples(ruleTriples + llmTriples)
                 } else {
                     ruleTriples
                 }
@@ -681,14 +673,13 @@ class CausalGraphBuilder(
             val variantsObj = root["variants"] as? JsonObject ?: JsonObject(emptyMap())
             val edgesArray = root["edges"] as? JsonArray ?: JsonArray(emptyList())
             val embeddingsObj = root["embeddings"] as? JsonObject
-
-            graph.clear()
-            _nodeText.clear()
-            nodeVariants.clear()
-            _nodeEmbeddings.clear()
+            val loadedGraph = DirectedGraph()
+            val loadedNodeText = mutableMapOf<String, String>()
+            val loadedNodeVariants = mutableMapOf<String, MutableList<String>>()
+            val loadedEmbeddings = mutableMapOf<String, DoubleArray>()
 
             for ((k, v) in nodesObj) {
-                _nodeText[k] = (v as? JsonPrimitive)?.content ?: k
+                loadedNodeText[k] = (v as? JsonPrimitive)?.content ?: k
             }
             for ((k, v) in variantsObj) {
                 val list = mutableListOf<String>()
@@ -697,7 +688,7 @@ class CausalGraphBuilder(
                         list.add((item as? JsonPrimitive)?.content.orEmpty())
                     }
                 }
-                nodeVariants[k] = list
+                loadedNodeVariants[k] = list
             }
 
             for (edge in edgesArray) {
@@ -705,7 +696,7 @@ class CausalGraphBuilder(
                 val from = (edge["from"] as? JsonPrimitive)?.content ?: continue
                 val to = (edge["to"] as? JsonPrimitive)?.content ?: continue
                 val weight = (edge["weight"] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 1.0
-                graph.addEdge(from, to, weight)
+                loadedGraph.addEdge(from, to, weight)
             }
 
             if (embeddingsObj != null) {
@@ -716,16 +707,27 @@ class CausalGraphBuilder(
                             .mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull() }
                             .toDoubleArray()
                     if (vector.isNotEmpty()) {
-                        _nodeEmbeddings[nodeId] = vector
+                        loadedEmbeddings[nodeId] = vector
                     }
                 }
             }
 
-            if (_nodeEmbeddings.isEmpty() && encoder != null) {
-                for ((nodeId, text) in _nodeText) {
-                    _nodeEmbeddings[nodeId] = encoder.encode(text)
+            if (loadedEmbeddings.isEmpty() && encoder != null) {
+                for ((nodeId, text) in loadedNodeText) {
+                    loadedEmbeddings[nodeId] = encoder.encode(text)
                 }
             }
+
+            graph.clear()
+            _nodeText.clear()
+            nodeVariants.clear()
+            _nodeEmbeddings.clear()
+            for (edge in loadedGraph.edges()) {
+                graph.addEdge(edge.from, edge.to, edge.weight)
+            }
+            _nodeText.putAll(loadedNodeText)
+            nodeVariants.putAll(loadedNodeVariants)
+            _nodeEmbeddings.putAll(loadedEmbeddings)
             true
         } catch (ex: IOException) {
             logger.error(ex) { "Error loading graph from $filepath" }

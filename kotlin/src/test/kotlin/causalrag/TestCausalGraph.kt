@@ -2,8 +2,13 @@ package causalrag
 
 import causalrag.causalgraph.builder.CausalGraphBuilder
 import causalrag.causalgraph.builder.CausalTriple
+import causalrag.causalgraph.builder.CausalTripleExtractor
 import causalrag.causalgraph.graph.DirectedGraph
 import causalrag.causalgraph.retriever.CausalPathRetriever
+import causalrag.generator.llm.LLMInterface
+import causalrag.utils.EmbeddingModel
+import io.mockk.every
+import io.mockk.mockk
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
@@ -197,6 +202,80 @@ class TestCausalGraph {
         val labels = nodes.map { builder.nodeText[it] ?: it }
 
         assertTrue(labels.any { it.equals("economic stress", ignoreCase = true) })
+    }
+
+    /**
+     * Verifies that a failed load does not destroy the existing in-memory graph.
+     */
+    @Test
+    fun testFailedLoadPreservesExistingState() {
+        Files.writeString(
+            tempFile,
+            """
+            {
+              "nodes": {
+                "climate change": "climate change",
+                "broken target": "broken target"
+              },
+              "edges": [
+                {
+                  "from": "climate change",
+                  "to": "broken target",
+                  "weight": 0.9
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+        val failingBuilder =
+            CausalGraphBuilder(
+                extractorMethod = "rule",
+                embeddingModel =
+                    object : EmbeddingModel {
+                        override fun encode(text: String): DoubleArray {
+                            if (text == "broken target") {
+                                error("synthetic embedding failure")
+                            }
+                            return doubleArrayOf(text.length.toDouble())
+                        }
+                    },
+            )
+        failingBuilder.indexDocuments(testDocuments)
+        val originalGraph = failingBuilder.getGraph()
+        val originalLabels = failingBuilder.nodeText.toMap()
+
+        val loaded = failingBuilder.load(tempFile.toString())
+
+        assertTrue(loaded.not())
+        assertEquals(originalGraph.numberOfNodes(), failingBuilder.getGraph().numberOfNodes())
+        assertEquals(originalGraph.numberOfEdges(), failingBuilder.getGraph().numberOfEdges())
+        assertEquals(originalLabels, failingBuilder.nodeText)
+    }
+
+    /**
+     * Verifies that hybrid extraction keeps the strongest confidence across rule and LLM duplicates.
+     */
+    @Test
+    fun testHybridExtractionPrefersHigherConfidenceDuplicate() {
+        val llm = mockk<LLMInterface>()
+        every {
+            llm.generate(
+                any(),
+                temperature = 0.1,
+                maxTokens = 800,
+                stream = false,
+                jsonMode = true,
+                jsonArrayMode = true,
+            )
+        } returns """[{"cause":"climate change","effect":"coastal flooding","confidence":0.95}]"""
+        val extractor = CausalTripleExtractor(method = "hybrid", llmInterface = llm)
+
+        val triples = extractor.extract("Climate change causes coastal flooding.")
+
+        assertEquals(1, triples.size)
+        assertEquals("climate change", triples.first().cause)
+        assertEquals("coastal flooding", triples.first().effect)
+        assertEquals(0.95, triples.first().confidence)
     }
 
     private fun hasRelation(

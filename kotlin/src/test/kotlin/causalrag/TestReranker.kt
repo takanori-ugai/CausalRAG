@@ -191,6 +191,23 @@ class TestReranker {
     }
 
     /**
+     * Verifies that explanations only report causal relationships when the passage preserves order.
+     */
+    @Test
+    fun testExplanationRequiresPreservedOrder() {
+        every { mockRetriever.retrievePathNodes(any(), any(), any(), any()) } returns
+            listOf("cause", "effect")
+        every { mockRetriever.retrievePaths(any(), any(), any(), any()) } returns
+            listOf(listOf("cause", "effect"))
+
+        val explanation = reranker.getExplanation("test explanation", "Effect appears before cause.", null)
+
+        assertTrue(explanation.contains("Matched concepts (2/2):"))
+        assertTrue(explanation.contains("No causal relationships preserved."))
+        assertTrue(explanation.contains("cause -> effect").not())
+    }
+
+    /**
      * Verifies that BM25 returns no passages when a query has no lexical matches.
      */
     @Test

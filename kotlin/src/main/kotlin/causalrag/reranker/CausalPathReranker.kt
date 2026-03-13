@@ -150,9 +150,10 @@ class CausalPathReranker(
         metadata: Map<String, Any>?,
     ): String {
         val (pathNodes, causalPaths) = getQueryContext(query)
+        val candidateLower = candidate.lowercase()
         val nodeMatches =
             pathNodes.filter { node ->
-                node.length >= minNodeLength && candidate.lowercase().contains(node.lowercase())
+                node.length >= minNodeLength && candidateLower.contains(node.lowercase())
             }
         val pathMatches = mutableListOf<String>()
         for (path in causalPaths) {
@@ -160,13 +161,16 @@ class CausalPathReranker(
             for (i in 0 until path.size - 1) {
                 val cause = path[i].lowercase()
                 val effect = path[i + 1].lowercase()
-                if (
-                    cause.length >= minNodeLength &&
-                    effect.length >= minNodeLength &&
-                    candidate.lowercase().contains(cause) &&
-                    candidate.lowercase().contains(effect)
-                ) {
-                    pathMatches.add("$cause -> $effect")
+                if (cause.length >= minNodeLength && effect.length >= minNodeLength) {
+                    val causePositions = findAllOccurrences(candidateLower, cause)
+                    val effectPositions = findAllOccurrences(candidateLower, effect)
+                    val preservesOrder =
+                        causePositions.any { causePos ->
+                            effectPositions.any { effectPos -> causePos < effectPos }
+                        }
+                    if (preservesOrder) {
+                        pathMatches.add("$cause -> $effect")
+                    }
                 }
             }
         }

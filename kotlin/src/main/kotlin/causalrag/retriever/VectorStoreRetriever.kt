@@ -139,17 +139,20 @@ class VectorStoreRetriever(
                 }
             }
 
-        passages.clear()
-        passages.addAll(texts)
-        this.metadata.clear()
-        this.metadata.addAll(normalizedMetadata)
-
-        vectors.clear()
+        val newPassages = texts.toMutableList()
+        val newMetadata = normalizedMetadata.toMutableList()
+        val newVectors = mutableListOf<DoubleArray>()
         for (i in texts.indices step batchSize) {
             val batch = texts.subList(i, minOf(i + batchSize, texts.size))
             val batchVectors = encoder.encodeAll(batch)
-            vectors.addAll(batchVectors)
+            newVectors.addAll(batchVectors)
         }
+        passages.clear()
+        passages.addAll(newPassages)
+        this.metadata.clear()
+        this.metadata.addAll(newMetadata)
+        vectors.clear()
+        vectors.addAll(newVectors)
 
         if (cacheDir != null) {
             cacheVectors(cacheDir, normalizedIds, normalizedMetadata)
@@ -309,10 +312,12 @@ class VectorStoreRetriever(
             val vectorsJson = json.parseToJsonElement(Files.readString(vectorsPath)) as? JsonArray
             val metaJson = json.parseToJsonElement(Files.readString(metaPath)) as? JsonObject
             if (vectorsJson == null || metaJson == null) return false
-            clearIndex()
+            val loadedVectors = mutableListOf<DoubleArray>()
+            val loadedPassages = mutableListOf<String>()
+            val loadedMetadata = mutableListOf<Map<String, Any>>()
             for (vecElement in vectorsJson) {
                 if (vecElement is JsonArray) {
-                    vectors.add(
+                    loadedVectors.add(
                         vecElement
                             .mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull() }
                             .toDoubleArray(),
@@ -321,18 +326,17 @@ class VectorStoreRetriever(
             }
             val passagesJson = metaJson["passages"] as? JsonArray ?: JsonArray(emptyList())
             for (p in passagesJson) {
-                passages.add((p as? JsonPrimitive)?.content.orEmpty())
+                loadedPassages.add((p as? JsonPrimitive)?.content.orEmpty())
             }
             val metaArray = metaJson["metadata"] as? JsonArray ?: JsonArray(emptyList())
             for (m in metaArray) {
                 if (m is JsonObject) {
-                    metadata.add(jsonObjectToMap(m))
+                    loadedMetadata.add(jsonObjectToMap(m))
                 }
             }
-            val vectorSizes = vectors.map { it.size }.toSet()
+            val vectorSizes = loadedVectors.map { it.size }.toSet()
             if (vectorSizes.size > 1) {
                 logger.error { "Cached index is inconsistent: vectors contain multiple dimensions $vectorSizes" }
-                clearIndex()
                 return false
             }
             val actualVectorDimension = vectorSizes.firstOrNull() ?: 0
@@ -341,30 +345,29 @@ class VectorStoreRetriever(
                 logger.error {
                     "Cached index is inconsistent: metadata dimension=$cachedVectorDimension, actual=$actualVectorDimension"
                 }
-                clearIndex()
                 return false
             }
-            if (passages.size != vectors.size) {
-                logger.error { "Cached index is inconsistent: vectors=${vectors.size}, passages=${passages.size}" }
-                clearIndex()
+            if (loadedPassages.size != loadedVectors.size) {
+                logger.error { "Cached index is inconsistent: vectors=${loadedVectors.size}, passages=${loadedPassages.size}" }
                 return false
             }
             if (expectedVectorDimension != null && actualVectorDimension != expectedVectorDimension) {
                 logger.error {
                     "Cached index dimension ($actualVectorDimension) does not match retriever expectation ($expectedVectorDimension)"
                 }
-                clearIndex()
                 return false
             }
+            clearIndex()
+            vectors.addAll(loadedVectors)
+            passages.addAll(loadedPassages)
+            metadata.addAll(loadedMetadata)
             logger.info { "Loaded ${vectors.size} vectors from cache" }
             true
         } catch (ex: IOException) {
             logger.error(ex) { "Error loading cached vectors" }
-            clearIndex()
             false
         } catch (ex: RuntimeException) {
             logger.error(ex) { "Error loading cached vectors" }
-            clearIndex()
             false
         }
     }
