@@ -186,6 +186,19 @@ class TestCausalGraph {
         assertTrue(builder.describeGraph().contains("rogue-cause").not())
     }
 
+    /**
+     * Verifies that the retriever snapshots the latest builder graph per call.
+     */
+    @Test
+    fun testRetrieverSeesGraphUpdatesAfterConstruction() {
+        builder.addTriples(listOf(CausalTriple("population displacement", "economic stress", 0.8)))
+
+        val nodes = retriever.retrievePathNodes("climate change", topK = 5, maxHops = 4, includeSimilar = false)
+        val labels = nodes.map { builder.nodeText[it] ?: it }
+
+        assertTrue(labels.any { it.equals("economic stress", ignoreCase = true) })
+    }
+
     private fun hasRelation(
         cause: String,
         effect: String,

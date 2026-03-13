@@ -92,10 +92,7 @@ private fun l2Normalize(vector: DoubleArray): DoubleArray {
     }
     if (norm == 0.0) return vector
     val scale = 1.0 / sqrt(norm)
-    for (i in vector.indices) {
-        vector[i] *= scale
-    }
-    return vector
+    return DoubleArray(vector.size) { index -> vector[index] * scale }
 }
 
 /**

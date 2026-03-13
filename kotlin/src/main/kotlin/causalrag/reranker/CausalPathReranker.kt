@@ -107,9 +107,13 @@ class CausalPathReranker(
                 if (cause.length < minNodeLength || effect.length < minNodeLength) continue
                 totalPairs += 1
                 if (passageLower.contains(cause) && passageLower.contains(effect)) {
-                    val causePos = passageLower.indexOf(cause)
-                    val effectPos = passageLower.indexOf(effect)
-                    pairMatches += if (causePos < effectPos) 1.5 else 0.5
+                    val causePositions = findAllOccurrences(passageLower, cause)
+                    val effectPositions = findAllOccurrences(passageLower, effect)
+                    val preservesOrder =
+                        causePositions.any { causePos ->
+                            effectPositions.any { effectPos -> causePos < effectPos }
+                        }
+                    pairMatches += if (preservesOrder) 1.5 else 0.5
                 }
             }
             if (totalPairs > 0) {
@@ -117,6 +121,19 @@ class CausalPathReranker(
             }
         }
         return if (pathScores.isNotEmpty()) pathScores.average() else 0.0
+    }
+
+    private fun findAllOccurrences(
+        text: String,
+        term: String,
+    ): List<Int> {
+        val positions = mutableListOf<Int>()
+        var startIndex = text.indexOf(term)
+        while (startIndex >= 0) {
+            positions.add(startIndex)
+            startIndex = text.indexOf(term, startIndex + 1)
+        }
+        return positions
     }
 
     /**

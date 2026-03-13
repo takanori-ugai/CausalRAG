@@ -292,7 +292,9 @@ CAUSAL RELATIONSHIPS:"""
 
     private fun fixJsonErrors(jsonStr: String): String {
         var fixed = jsonStr
-        // Convert single-quoted keys/values without touching apostrophes inside text.
+        // Best-effort recovery for malformed LLM JSON after strict parsing has already failed.
+        // Keep these rewrites conservative: broad quote normalization can corrupt text values
+        // that legitimately contain apostrophes, so this only patches common structural issues.
         fixed =
             fixed
                 .replace(Regex("'([^']*)'\\s*:"), "\"$1\":")

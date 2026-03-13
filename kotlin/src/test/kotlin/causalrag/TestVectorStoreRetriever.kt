@@ -1,12 +1,14 @@
 package causalrag
 
 import causalrag.retriever.VectorStoreRetriever
+import causalrag.utils.EmbeddingModel
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -33,16 +35,19 @@ class TestVectorStoreRetriever {
     }
 
     /**
-     * Verifies that reindexing replaces passages even when storeOriginal is disabled.
+     * Verifies that disabling passage retention is rejected until the API supports it.
      */
     @Test
-    fun testReindexKeepsPassagesAligned() {
+    fun testIndexCorpusRejectsStoreOriginalFalse() {
         val retriever = VectorStoreRetriever(dimension = 64)
-        retriever.indexCorpus(listOf("alpha signal"), storeOriginal = false)
-        retriever.indexCorpus(listOf("beta signal"), storeOriginal = false)
 
-        assertEquals(listOf("beta signal"), retriever.getPassages())
-        assertEquals(listOf("beta signal"), retriever.search("beta", topK = 1))
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                retriever.indexCorpus(listOf("alpha signal"), storeOriginal = false)
+            }
+
+        assertTrue(error.message!!.contains("storeOriginal=false"))
+        assertTrue(retriever.getPassages().isEmpty())
     }
 
     /**
@@ -100,5 +105,26 @@ class TestVectorStoreRetriever {
 
         assertFalse(loaded)
         assertTrue(reader.getPassages().isEmpty())
+    }
+
+    /**
+     * Verifies that custom embedding overrides can load caches without assuming the hash default dimension.
+     */
+    @Test
+    fun testLoadIndexAllowsCustomOverrideWithoutExplicitDimension() {
+        val cacheDir = tempDir.resolve("override-cache")
+        val customEmbedding =
+            object : EmbeddingModel {
+                override fun encode(text: String): DoubleArray = doubleArrayOf(1.0, 2.0, 3.0)
+            }
+        val writer = VectorStoreRetriever(embeddingModelOverride = customEmbedding)
+        writer.indexCorpus(listOf("override document"))
+        assertTrue(writer.saveIndex(cacheDir.toString()))
+
+        val reader = VectorStoreRetriever(embeddingModelOverride = customEmbedding)
+        val loaded = reader.loadIndex(cacheDir.toString())
+
+        assertTrue(loaded)
+        assertEquals(listOf("override document"), reader.getPassages())
     }
 }

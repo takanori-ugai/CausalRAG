@@ -319,7 +319,11 @@ class CausalGraphExplainer(
             """.trimIndent()
     }
 
-    private fun escapeForScript(json: String): String = json.replace("</", "<\\/")
+    private fun escapeForScript(json: String): String =
+        json
+            .replace("</", "<\\/")
+            .replace("<!--", "<\\!--")
+            .replace("]]>", "]]\\>")
 
     // Uses DirectedGraph.findPaths to avoid duplicated DFS logic.
 }

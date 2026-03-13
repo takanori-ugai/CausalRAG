@@ -57,7 +57,12 @@ class VectorStoreRetriever(
             embeddingApiKey = embeddingApiKey,
             embeddingModelOverride = embeddingModelOverride,
         )
-    private val expectedVectorDimension = resolveExpectedVectorDimension(resolvedEmbeddingModel, embeddingApiKey)
+    private val expectedVectorDimension =
+        resolveExpectedVectorDimension(
+            modelName = resolvedEmbeddingModel,
+            embeddingApiKey = embeddingApiKey,
+            embeddingModelOverride = embeddingModelOverride,
+        )
     private val encoder: EmbeddingModel? =
         embeddingModelOverride ?: run {
             if (!embeddingApiKey.isNullOrBlank()) {
@@ -83,7 +88,8 @@ class VectorStoreRetriever(
      * @param texts Text passages to index.
      * @param metadata Optional metadata aligned with [texts].
      * @param ids Optional identifiers aligned with [texts].
-     * @param storeOriginal Whether to retain the original passages and metadata.
+     * @param storeOriginal Whether to retain the original passages and metadata. Must be `true`
+     * because the current search API returns passages from the in-memory index.
      */
     fun indexCorpus(
         texts: List<String>,
@@ -91,6 +97,9 @@ class VectorStoreRetriever(
         ids: List<String>? = null,
         storeOriginal: Boolean = true,
     ) {
+        require(storeOriginal) {
+            "storeOriginal=false is not supported because the current search API requires stored passages."
+        }
         if (texts.isEmpty()) {
             logger.warn { "Empty corpus provided for indexing" }
             return
@@ -130,12 +139,6 @@ class VectorStoreRetriever(
                 }
             }
 
-        if (!storeOriginal) {
-            logger.warn {
-                "storeOriginal=false is not compatible with the current search API; " +
-                    "retaining passages to keep hits aligned with vectors."
-            }
-        }
         passages.clear()
         passages.addAll(texts)
         this.metadata.clear()
@@ -460,10 +463,11 @@ class VectorStoreRetriever(
     private fun resolveExpectedVectorDimension(
         modelName: String,
         embeddingApiKey: String?,
+        embeddingModelOverride: EmbeddingModel?,
     ): Int? =
-        if (embeddingApiKey.isNullOrBlank()) {
-            dimension ?: DEFAULT_HASH_DIMENSION
-        } else {
-            OPENAI_EMBEDDING_DIMENSIONS[modelName]
+        when {
+            embeddingModelOverride != null -> dimension
+            embeddingApiKey.isNullOrBlank() -> dimension ?: DEFAULT_HASH_DIMENSION
+            else -> OPENAI_EMBEDDING_DIMENSIONS[modelName]
         }
 }

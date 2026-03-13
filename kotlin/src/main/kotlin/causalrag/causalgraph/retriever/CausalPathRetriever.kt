@@ -19,8 +19,6 @@ class CausalPathRetriever(
     private val builder: CausalGraphBuilder,
     private val similarNodeThreshold: Double = 0.8,
 ) {
-    private val graph: DirectedGraph
-        get() = builder.getGraph()
     private val nodeEmbeddings: Map<String, DoubleArray>
         get() = builder.nodeEmbeddings
     private val nodeText = builder.nodeText
@@ -77,14 +75,25 @@ class CausalPathRetriever(
         maxHops: Int = 2,
         includeSimilar: Boolean = true,
     ): List<String> {
+        val graph = builder.getGraph()
+        return retrievePathNodes(graph, query, topK, maxHops, includeSimilar)
+    }
+
+    private fun retrievePathNodes(
+        graph: DirectedGraph,
+        query: String,
+        topK: Int,
+        maxHops: Int,
+        includeSimilar: Boolean,
+    ): List<String> {
         val topNodes = retrieveNodes(query, topK = topK)
         val pathNodes = mutableSetOf<String>()
         val seedNodes = topNodes.map { it.first }
 
         for (nodeId in seedNodes) {
             pathNodes.add(nodeId)
-            pathNodes.addAll(getDescendants(nodeId, maxHops))
-            pathNodes.addAll(getAncestors(nodeId, maxHops))
+            pathNodes.addAll(getDescendants(graph, nodeId, maxHops))
+            pathNodes.addAll(getAncestors(graph, nodeId, maxHops))
         }
 
         if (includeSimilar && seedNodes.isNotEmpty() && encoder != null) {
@@ -124,6 +133,7 @@ class CausalPathRetriever(
     }
 
     private fun getDescendants(
+        graph: DirectedGraph,
         node: String,
         maxHops: Int,
     ): Set<String> {
@@ -142,6 +152,7 @@ class CausalPathRetriever(
     }
 
     private fun getAncestors(
+        graph: DirectedGraph,
         node: String,
         maxHops: Int,
     ): Set<String> {
@@ -174,7 +185,8 @@ class CausalPathRetriever(
         minPathLength: Int = 2,
         maxPathLength: Int = 4,
     ): List<List<String>> {
-        val relevantNodes = retrievePathNodes(query, topK = 5, maxHops = 1)
+        val graph = builder.getGraph()
+        val relevantNodes = retrievePathNodes(graph, query, topK = 5, maxHops = 1, includeSimilar = true)
         if (relevantNodes.size < 2) return emptyList()
 
         val paths = mutableListOf<Pair<List<String>, List<String>>>()
@@ -231,7 +243,8 @@ class CausalPathRetriever(
      * @return Subgraph induced by the relevant nodes.
      */
     fun highlightSubgraph(query: String): DirectedGraph {
-        val nodes = retrievePathNodes(query)
+        val graph = builder.getGraph()
+        val nodes = retrievePathNodes(graph, query, topK = 5, maxHops = 2, includeSimilar = true)
         return graph.subgraph(nodes.toSet())
     }
 }

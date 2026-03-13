@@ -103,14 +103,14 @@ class DirectedGraph {
     fun subgraph(nodeSet: Set<String>): DirectedGraph {
         val sub = DirectedGraph()
         val retained = nodeSet.intersect(nodes())
-        for (node in retained) {
-            sub.outEdges.getOrPut(node) { mutableMapOf() }
-            sub.inEdges.getOrPut(node) { mutableSetOf() }
-        }
         for (edge in edges()) {
             if (edge.from in retained && edge.to in retained) {
                 sub.addEdge(edge.from, edge.to, edge.weight)
             }
+        }
+        for (node in retained) {
+            sub.outEdges.getOrPut(node) { mutableMapOf() }
+            sub.inEdges.getOrPut(node) { mutableSetOf() }
         }
         return sub
     }
@@ -229,7 +229,7 @@ class DirectedGraph {
      *
      * @param start Start node.
      * @param end End node.
-     * @param maxDepth Maximum path depth to explore.
+     * @param maxDepth Maximum number of edges (hops) to traverse.
      * @param limit Maximum number of paths to return.
      * @return Paths from [start] to [end].
      */

@@ -169,6 +169,28 @@ class TestReranker {
     }
 
     /**
+     * Verifies that later repeated mentions can still satisfy causal ordering.
+     */
+    @Test
+    fun testPathStructureUsesLaterRepeatedMentions() {
+        every { mockRetriever.retrievePathNodes(any(), any(), any(), any()) } returns
+            listOf("cause", "effect")
+        every { mockRetriever.retrievePaths(any(), any(), any(), any()) } returns
+            listOf(listOf("cause", "effect"))
+
+        val docs =
+            listOf(
+                "Effect appears first. Later, cause appears and then effect appears again.",
+                "Effect appears first and cause appears later.",
+            )
+
+        val ranked = reranker.rerank("test repeated mentions", docs)
+
+        assertEquals(docs[0], ranked.first().first)
+        assertTrue(ranked[0].second > ranked[1].second)
+    }
+
+    /**
      * Verifies that BM25 returns no passages when a query has no lexical matches.
      */
     @Test
