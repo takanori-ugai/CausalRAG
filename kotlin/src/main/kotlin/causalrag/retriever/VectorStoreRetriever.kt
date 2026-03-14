@@ -201,6 +201,7 @@ class VectorStoreRetriever(
         topK: Int,
         threshold: Double?,
     ): List<SearchHit> {
+        require(topK >= 0) { "topK must be >= 0" }
         if (encoder == null) {
             logger.error { "Encoder not initialized, cannot search" }
             return emptyList()
@@ -329,10 +330,43 @@ class VectorStoreRetriever(
             for (p in passagesJson) {
                 loadedPassages.add((p as? JsonPrimitive)?.content.orEmpty())
             }
-            val metaArray = metaJson["metadata"] as? JsonArray ?: JsonArray(emptyList())
-            for (m in metaArray) {
-                if (m is JsonObject) {
-                    loadedMetadata.add(jsonObjectToMap(m))
+            val idsJson = metaJson["ids"] as? JsonArray
+            if (idsJson != null && idsJson.size != loadedPassages.size) {
+                logger.error { "Cached index is inconsistent: ids=${idsJson.size}, passages=${loadedPassages.size}" }
+                return false
+            }
+            val cachedEmbeddingModel = (metaJson["embedding_model"] as? JsonPrimitive)?.content
+            if (cachedEmbeddingModel != null && cachedEmbeddingModel != resolvedEmbeddingModel) {
+                logger.error {
+                    "Cached index embedding model ($cachedEmbeddingModel) does not match retriever configuration ($resolvedEmbeddingModel)"
+                }
+                return false
+            }
+            val metadataElement = metaJson["metadata"]
+            when (metadataElement) {
+                null -> {
+                    repeat(loadedPassages.size) { loadedMetadata.add(emptyMap()) }
+                }
+
+                is JsonArray -> {
+                    if (metadataElement.size != loadedPassages.size) {
+                        logger.error {
+                            "Cached index is inconsistent: metadata=${metadataElement.size}, passages=${loadedPassages.size}"
+                        }
+                        return false
+                    }
+                    for (m in metadataElement) {
+                        if (m !is JsonObject) {
+                            logger.error { "Cached index is inconsistent: metadata entries must be JSON objects" }
+                            return false
+                        }
+                        loadedMetadata.add(jsonObjectToMap(m))
+                    }
+                }
+
+                else -> {
+                    logger.error { "Cached index is inconsistent: metadata field must be an array" }
+                    return false
                 }
             }
             val vectorSizes = loadedVectors.map { it.size }.toSet()

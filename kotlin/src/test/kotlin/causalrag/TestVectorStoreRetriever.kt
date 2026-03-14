@@ -91,6 +91,32 @@ class TestVectorStoreRetriever {
     }
 
     /**
+     * Verifies that malformed caches with misaligned metadata arrays are rejected.
+     */
+    @Test
+    fun testLoadIndexRejectsMismatchedMetadataCount() {
+        val cacheDir = tempDir.resolve("bad-metadata-cache")
+        Files.createDirectories(cacheDir)
+        Files.writeString(cacheDir.resolve("vectors.json"), "[[1.0, 0.0, 0.0]]")
+        Files.writeString(
+            cacheDir.resolve("metadata.json"),
+            """
+            {
+              "passages": ["document"],
+              "metadata": [],
+              "vector_dimension": 3
+            }
+            """.trimIndent(),
+        )
+
+        val retriever = VectorStoreRetriever(dimension = 3)
+        val loaded = retriever.loadIndex(cacheDir.toString())
+
+        assertFalse(loaded)
+        assertTrue(retriever.getPassages().isEmpty())
+    }
+
+    /**
      * Verifies that a failed cache load does not destroy the existing in-memory index.
      */
     @Test
@@ -149,6 +175,22 @@ class TestVectorStoreRetriever {
     }
 
     /**
+     * Verifies that negative topK values are rejected consistently through the public search API.
+     */
+    @Test
+    fun testSearchRejectsNegativeTopK() {
+        val retriever = VectorStoreRetriever(dimension = 64)
+        retriever.indexCorpus(listOf("kept document"))
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                retriever.search("kept", topK = -1)
+            }
+
+        assertTrue(error.message!!.contains("topK must be >= 0"))
+    }
+
+    /**
      * Verifies that caches built with a different vector dimension are rejected.
      */
     @Test
@@ -159,6 +201,42 @@ class TestVectorStoreRetriever {
         assertTrue(writer.saveIndex(cacheDir.toString()))
 
         val reader = VectorStoreRetriever(dimension = 32)
+        val loaded = reader.loadIndex(cacheDir.toString())
+
+        assertFalse(loaded)
+        assertTrue(reader.getPassages().isEmpty())
+    }
+
+    /**
+     * Verifies that caches built for a different embedding model are rejected even when dimensions match.
+     */
+    @Test
+    fun testLoadIndexRejectsEmbeddingModelMismatch() {
+        val cacheDir = tempDir.resolve("model-cache")
+        Files.createDirectories(cacheDir)
+        val vectorPayload =
+            buildString {
+                append("[[")
+                repeat(1536) { index ->
+                    if (index > 0) append(",")
+                    append(if (index == 0) "1.0" else "0.0")
+                }
+                append("]]")
+            }
+        Files.writeString(cacheDir.resolve("vectors.json"), vectorPayload)
+        Files.writeString(
+            cacheDir.resolve("metadata.json"),
+            """
+            {
+              "passages": ["model-specific document"],
+              "metadata": [{}],
+              "embedding_model": "text-embedding-3-small",
+              "vector_dimension": 1536
+            }
+            """.trimIndent(),
+        )
+
+        val reader = VectorStoreRetriever(embeddingModel = "text-embedding-ada-002", embeddingApiKey = "reader-key")
         val loaded = reader.loadIndex(cacheDir.toString())
 
         assertFalse(loaded)

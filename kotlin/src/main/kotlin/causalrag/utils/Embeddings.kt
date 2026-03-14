@@ -39,6 +39,15 @@ class LangChain4jEmbeddingModel(
         val vector = embedding.vector()
         return DoubleArray(vector.size) { idx -> vector[idx].toDouble() }
     }
+
+    override fun encodeAll(texts: List<String>): List<DoubleArray> {
+        val segments = texts.map(dev.langchain4j.data.segment.TextSegment::from)
+        val embeddings = delegate.embedAll(segments).content()
+        return embeddings.map { embedding ->
+            val vector = embedding.vector()
+            DoubleArray(vector.size) { idx -> vector[idx].toDouble() }
+        }
+    }
 }
 
 /**
@@ -64,7 +73,7 @@ class SimpleHashEmbedding(
     }
 
     private fun tokenize(text: String): List<String> =
-        Regex("[A-Za-z0-9_]+")
+        Regex("""[\p{L}\p{M}\p{N}_]+""")
             .findAll(text.lowercase())
             .map { it.value }
             .toList()
