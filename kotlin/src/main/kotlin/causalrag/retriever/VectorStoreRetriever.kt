@@ -1,9 +1,12 @@
 package causalrag.retriever
 
+import causalrag.utils.DEFAULT_LOCAL_EMBEDDING_MODEL
+import causalrag.utils.DEFAULT_OPENAI_EMBEDDING_MODEL
 import causalrag.utils.EmbeddingModel
 import causalrag.utils.EmbeddingModelFactory
 import causalrag.utils.SimpleHashEmbedding
 import causalrag.utils.cosineSimilarity
+import causalrag.utils.resolveDefaultModelName
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -18,8 +21,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
-private const val DEFAULT_LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-private const val DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 private const val DEFAULT_HASH_DIMENSION = 384
 private val OPENAI_EMBEDDING_DIMENSIONS =
     mapOf(
@@ -453,14 +454,13 @@ class VectorStoreRetriever(
         if (embeddingModelOverride != null || embeddingApiKey.isNullOrBlank()) {
             return configuredModel
         }
-        return if (configuredModel == DEFAULT_LOCAL_EMBEDDING_MODEL) {
+        val resolvedModel = resolveDefaultModelName(configuredModel, hasApiKey = true)
+        if (resolvedModel != configuredModel) {
             logger.info {
                 "Using $DEFAULT_OPENAI_EMBEDDING_MODEL for OpenAI embeddings instead of local default $DEFAULT_LOCAL_EMBEDDING_MODEL"
             }
-            DEFAULT_OPENAI_EMBEDDING_MODEL
-        } else {
-            configuredModel
         }
+        return resolvedModel
     }
 
     private fun resolveExpectedVectorDimension(

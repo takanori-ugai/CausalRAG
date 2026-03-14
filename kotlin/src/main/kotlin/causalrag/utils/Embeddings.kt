@@ -1,9 +1,11 @@
 package causalrag.utils
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.math.sqrt
 
-private const val DEFAULT_LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-private const val DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+internal const val DEFAULT_LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+internal const val DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+private val logger = KotlinLogging.logger {}
 
 /**
  * Minimal embedding model contract used across retrieval and graph components.
@@ -109,7 +111,14 @@ object EmbeddingModelFactory {
     /**
      * Creates the default embedding model for the current environment.
      *
-     * @param modelName Embedding model name.
+     * When an API key is available, this factory always returns an OpenAI-backed model. Passing the
+     * local default name (`all-MiniLM-L6-v2`) in that case is treated as "use the default external
+     * embedding model" and is resolved to `text-embedding-3-small`, because the local sentence-transformer
+     * is not instantiated by this factory. When no API key is available, the factory falls back to
+     * [SimpleHashEmbedding].
+     *
+     * @param modelName Embedding model name. The local default name is remapped to the OpenAI default
+     * when [apiKey] is present.
      * @param apiKey Optional API key. When absent, falls back to [SimpleHashEmbedding].
      * @return Configured embedding model.
      */
@@ -118,12 +127,13 @@ object EmbeddingModelFactory {
         apiKey: String? = System.getenv("OPENAI_API_KEY"),
     ): EmbeddingModel =
         if (!apiKey.isNullOrBlank()) {
-            val resolvedModelName =
-                if (modelName == DEFAULT_LOCAL_EMBEDDING_MODEL) {
-                    DEFAULT_OPENAI_EMBEDDING_MODEL
-                } else {
-                    modelName
+            val resolvedModelName = resolveDefaultModelName(modelName, hasApiKey = true)
+            if (resolvedModelName != modelName) {
+                logger.info {
+                    "Resolved embedding model '$modelName' to '$resolvedModelName' because createDefault() " +
+                        "uses an OpenAI-backed encoder when an API key is configured."
                 }
+            }
             createOpenAi(resolvedModelName, apiKey)
         } else {
             SimpleHashEmbedding()
@@ -149,3 +159,13 @@ object EmbeddingModelFactory {
         return LangChain4jEmbeddingModel(openAi)
     }
 }
+
+internal fun resolveDefaultModelName(
+    modelName: String,
+    hasApiKey: Boolean,
+): String =
+    if (hasApiKey && modelName == DEFAULT_LOCAL_EMBEDDING_MODEL) {
+        DEFAULT_OPENAI_EMBEDDING_MODEL
+    } else {
+        modelName
+    }

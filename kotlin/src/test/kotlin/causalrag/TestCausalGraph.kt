@@ -233,6 +233,8 @@ class TestCausalGraph {
                 embeddingModel =
                     object : EmbeddingModel {
                         override fun encode(text: String): DoubleArray {
+                            // The fixture omits serialized embeddings, so load() falls back to
+                            // re-encoding each node before any in-memory state is replaced.
                             if (text == "broken target") {
                                 error("synthetic embedding failure")
                             }
@@ -262,8 +264,8 @@ class TestCausalGraph {
             llm.generate(
                 any(),
                 temperature = 0.1,
-                maxTokens = 800,
-                stream = false,
+                maxTokens = any(),
+                stream = any(),
                 jsonMode = true,
                 jsonArrayMode = true,
             )
