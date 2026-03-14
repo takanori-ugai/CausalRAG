@@ -4,6 +4,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Runs evaluation from the command line using JSON evaluation data.
+ *
+ * @param args Command-line arguments.
+ */
 fun main(args: Array<String>) {
     val options = CliUtils.parseOptions(args.toList())
     val evalDataPath =

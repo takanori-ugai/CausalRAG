@@ -5,6 +5,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Reranks passages based on overlap with retrieved causal nodes and paths.
+ *
+ * @param retriever Retriever used to obtain causal nodes and paths for the query.
+ * @param name Reranker name exposed through the [BaseReranker] interface.
+ * @param nodeMatchWeight Weight applied to node-overlap matches in the final score.
+ * @param pathMatchWeight Weight applied to causal path-structure matches in the final score.
+ * @param semanticMatchWeight Weight applied to the incoming semantic score from candidate metadata.
+ * @param minNodeLength Minimum node text length required before a node is considered for matching.
+ */
 @Suppress("TooGenericExceptionCaught")
 class CausalPathReranker(
     private val retriever: CausalPathRetriever,
@@ -14,6 +24,14 @@ class CausalPathReranker(
     private val semanticMatchWeight: Double = 0.5,
     private val minNodeLength: Int = 3,
 ) : BaseReranker(name) {
+    /**
+     * Reranks candidate passages using causal node overlap, path structure, and optional semantic scores.
+     *
+     * @param query User query.
+     * @param candidates Candidate passages.
+     * @param metadata Optional candidate metadata aligned with [candidates].
+     * @return Candidates paired with normalized reranking scores.
+     */
     override fun rerank(
         query: String,
         candidates: List<String>,
@@ -89,9 +107,13 @@ class CausalPathReranker(
                 if (cause.length < minNodeLength || effect.length < minNodeLength) continue
                 totalPairs += 1
                 if (passageLower.contains(cause) && passageLower.contains(effect)) {
-                    val causePos = passageLower.indexOf(cause)
-                    val effectPos = passageLower.indexOf(effect)
-                    pairMatches += if (causePos < effectPos) 1.5 else 0.5
+                    val causePositions = findAllOccurrences(passageLower, cause)
+                    val effectPositions = findAllOccurrences(passageLower, effect)
+                    val preservesOrder =
+                        causePositions.any { causePos ->
+                            effectPositions.any { effectPos -> causePos < effectPos }
+                        }
+                    pairMatches += if (preservesOrder) 1.5 else 0.5
                 }
             }
             if (totalPairs > 0) {
@@ -101,15 +123,37 @@ class CausalPathReranker(
         return if (pathScores.isNotEmpty()) pathScores.average() else 0.0
     }
 
+    private fun findAllOccurrences(
+        text: String,
+        term: String,
+    ): List<Int> {
+        val positions = mutableListOf<Int>()
+        var startIndex = text.indexOf(term)
+        while (startIndex >= 0) {
+            positions.add(startIndex)
+            startIndex = text.indexOf(term, startIndex + 1)
+        }
+        return positions
+    }
+
+    /**
+     * Explains the causal features that contributed to a candidate's score.
+     *
+     * @param query User query.
+     * @param candidate Candidate passage.
+     * @param metadata Optional candidate metadata.
+     * @return Human-readable explanation string.
+     */
     override fun getExplanation(
         query: String,
         candidate: String,
         metadata: Map<String, Any>?,
     ): String {
         val (pathNodes, causalPaths) = getQueryContext(query)
+        val candidateLower = candidate.lowercase()
         val nodeMatches =
             pathNodes.filter { node ->
-                node.length >= minNodeLength && candidate.lowercase().contains(node.lowercase())
+                node.length >= minNodeLength && candidateLower.contains(node.lowercase())
             }
         val pathMatches = mutableListOf<String>()
         for (path in causalPaths) {
@@ -117,13 +161,16 @@ class CausalPathReranker(
             for (i in 0 until path.size - 1) {
                 val cause = path[i].lowercase()
                 val effect = path[i + 1].lowercase()
-                if (
-                    cause.length >= minNodeLength &&
-                    effect.length >= minNodeLength &&
-                    candidate.lowercase().contains(cause) &&
-                    candidate.lowercase().contains(effect)
-                ) {
-                    pathMatches.add("$cause -> $effect")
+                if (cause.length >= minNodeLength && effect.length >= minNodeLength) {
+                    val causePositions = findAllOccurrences(candidateLower, cause)
+                    val effectPositions = findAllOccurrences(candidateLower, effect)
+                    val preservesOrder =
+                        causePositions.any { causePos ->
+                            effectPositions.any { effectPos -> causePos < effectPos }
+                        }
+                    if (preservesOrder) {
+                        pathMatches.add("$cause -> $effect")
+                    }
                 }
             }
         }

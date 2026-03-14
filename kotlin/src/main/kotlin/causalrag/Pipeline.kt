@@ -17,6 +17,19 @@ import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Serializable configuration for constructing a [CausalRAGPipeline].
+ *
+ * @property modelName Chat model name used for answer generation.
+ * @property embeddingModel Embedding model name used for retrieval and graph building.
+ * @property graphPath Optional path to a serialized causal graph.
+ * @property indexPath Optional path to a serialized vector index.
+ * @property llmProvider LLM backend identifier.
+ * @property llmApiKey API key used by the configured LLM provider.
+ * @property llmBaseUrl Optional base URL override for self-hosted providers.
+ * @property embeddingApiKey API key used by the embedding provider.
+ * @property templateStyle Prompt template style.
+ */
 @Serializable
 data class PipelineConfig(
     val modelName: String? = null,
@@ -30,6 +43,13 @@ data class PipelineConfig(
     val templateStyle: String? = null,
 )
 
+/**
+ * Output produced by [CausalRAGPipeline.runWithContext].
+ *
+ * @property answer Generated answer text.
+ * @property context Retrieved passages used as supporting context.
+ * @property causalPaths Retrieved causal paths supplied to generation.
+ */
 data class PipelineRunResult(
     val answer: String,
     val context: List<String>,
@@ -110,14 +130,23 @@ class CausalRAGPipeline(
         }
     }
 
-    /** Build graph + vector index from documents. */
+    /**
+     * Builds the causal graph and retrieval indexes from the supplied documents.
+     *
+     * @param documents Source documents to ingest.
+     */
     fun index(documents: List<String>) {
         graphBuilder.indexDocuments(documents)
         vectorRetriever.indexCorpus(documents)
         bm25Retriever.indexDocuments(documents)
     }
 
-    /** Save graph and vector index to a directory. */
+    /**
+     * Saves the graph and vector index to a directory.
+     *
+     * @param dir Target directory.
+     * @return `true` when both graph and vector index are saved successfully.
+     */
     fun save(dir: String): Boolean =
         try {
             val path = Path.of(dir)
@@ -133,7 +162,12 @@ class CausalRAGPipeline(
             false
         }
 
-    /** Load graph and vector index from a directory. */
+    /**
+     * Loads the graph and vector index from a directory.
+     *
+     * @param dir Directory containing serialized pipeline artifacts.
+     * @return `true` when both graph and vector index are loaded successfully.
+     */
     fun load(dir: String): Boolean =
         try {
             val path = Path.of(dir)
@@ -156,12 +190,25 @@ class CausalRAGPipeline(
             false
         }
 
-    /** Query → Retrieval → Rerank → Prompt → Generate. */
+    /**
+     * Runs the end-to-end pipeline and returns only the generated answer.
+     *
+     * @param query User query.
+     * @param topK Number of passages to keep after reranking.
+     * @return Generated answer text.
+     */
     fun run(
         query: String,
         topK: Int = 5,
     ): String = runWithContext(query, topK = topK).answer
 
+    /**
+     * Runs the end-to-end pipeline and returns the answer together with retrieval context.
+     *
+     * @param query User query.
+     * @param topK Number of passages to keep after reranking.
+     * @return Answer, context passages, and causal paths used for prompting.
+     */
     fun runWithContext(
         query: String,
         topK: Int = 5,
@@ -191,11 +238,25 @@ class CausalRAGPipeline(
         return PipelineRunResult(answer, rerankedPassages, causalPaths)
     }
 
+    /**
+     * Retrieves supporting passages without invoking answer generation.
+     *
+     * @param query User query.
+     * @param topK Maximum number of passages to return.
+     * @return Retrieved passages.
+     */
     fun retrieveContext(
         query: String,
         topK: Int = 5,
     ): List<String> = hybridRetriever.retrieve(query, topK = topK)
 
+    /**
+     * Retrieves causal paths relevant to a query.
+     *
+     * @param query User query.
+     * @param maxPaths Maximum number of paths to return.
+     * @return Relevant causal paths expressed as ordered node labels.
+     */
     fun retrieveCausalPaths(
         query: String,
         maxPaths: Int = 3,

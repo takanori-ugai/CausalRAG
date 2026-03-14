@@ -11,10 +11,24 @@ import java.util.Locale
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Produces human-readable explanations and visualizations for causal graphs.
+ *
+ * @param graph Directed graph instance to explain.
+ * @param nodeText Optional mapping from node identifiers to human-readable labels.
+ */
 class CausalGraphExplainer(
     private val graph: DirectedGraph,
     private val nodeText: Map<String, String> = emptyMap(),
 ) {
+    /**
+     * Prints representative paths between the supplied nodes.
+     *
+     * @param nodes Node identifiers to connect.
+     * @param maxPathLength Maximum path depth to search.
+     * @param includeWeights Whether edge weights should be shown.
+     * @return Human-readable path listing.
+     */
     fun printPaths(
         nodes: List<String>,
         maxPathLength: Int = 5,
@@ -32,12 +46,12 @@ class CausalGraphExplainer(
                 val tgtName = nodeText[tgt] ?: tgt
                 for ((start, end, label) in listOf(
                     Triple(src, tgt, "Effects of $srcName on $tgtName"),
-                    Triple(tgt, src, "Causes of $tgtName from $srcName"),
+                    Triple(tgt, src, "Effects of $tgtName on $srcName"),
                 )) {
-                    val paths = graph.findPaths(start, end, maxPathLength)
+                    val paths = graph.findPaths(start, end, maxPathLength, limit = 3)
                     if (paths.isNotEmpty()) {
                         explanation.add("\n$label:")
-                        for ((idx, path) in paths.take(3).withIndex()) {
+                        for ((idx, path) in paths.withIndex()) {
                             val segments = mutableListOf<String>()
                             for (j in 0 until path.size - 1) {
                                 val n1 = nodeText[path[j]] ?: path[j]
@@ -61,6 +75,11 @@ class CausalGraphExplainer(
         return explanation.joinToString("\n")
     }
 
+    /**
+     * Summarizes high-level graph structure and central concepts.
+     *
+     * @return Human-readable graph summary.
+     */
     fun summarizeGraph(): String {
         if (graph.numberOfNodes() == 0) return "Empty causal graph (no nodes or relationships)."
         val numNodes = graph.numberOfNodes()
@@ -113,6 +132,13 @@ class CausalGraphExplainer(
         return summary.joinToString("\n")
     }
 
+    /**
+     * Explains why the graph is relevant to a query using a [CausalPathRetriever].
+     *
+     * @param query User query.
+     * @param retriever Retriever used to score relevant nodes and paths.
+     * @return Human-readable relevance explanation.
+     */
     fun explainQueryRelevance(
         query: String,
         retriever: CausalPathRetriever,
@@ -138,6 +164,13 @@ class CausalGraphExplainer(
         return explanation.joinToString("\n")
     }
 
+    /**
+     * Generates a self-contained HTML visualization of the graph.
+     *
+     * @param highlightNodes Optional node identifiers to highlight.
+     * @param highlightEdges Optional directed edges to highlight.
+     * @return HTML document string.
+     */
     fun generateGraphVizHtml(
         highlightNodes: List<String>? = null,
         highlightEdges: List<Pair<String, String>>? = null,
@@ -286,7 +319,11 @@ class CausalGraphExplainer(
             """.trimIndent()
     }
 
-    private fun escapeForScript(json: String): String = json.replace("</", "<\\/")
+    private fun escapeForScript(json: String): String =
+        json
+            .replace("</", "<\\/")
+            .replace("<!--", "<\\!--")
+            .replace("]]>", "]]\\>")
 
     // Uses DirectedGraph.findPaths to avoid duplicated DFS logic.
 }
