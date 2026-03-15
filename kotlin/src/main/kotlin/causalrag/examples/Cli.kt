@@ -10,6 +10,11 @@ import kotlin.streams.toList
 
 private const val VERSION = "0.0.1"
 
+/**
+ * Entry point for the repository CLI.
+ *
+ * @param args Command-line arguments.
+ */
 fun main(args: Array<String>) {
     if (args.isEmpty()) {
         printUsage()

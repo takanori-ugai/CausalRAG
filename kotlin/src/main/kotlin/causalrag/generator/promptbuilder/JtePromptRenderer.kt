@@ -8,12 +8,26 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
+/**
+ * Renders prompt templates backed by JTE.
+ *
+ * @property templatesDir Optional directory containing template overrides.
+ */
 class JtePromptRenderer(
     private val templatesDir: String?,
 ) {
     private var cachedEngine: TemplateEngine? = null
     private var cachedDir: Path? = null
 
+    /**
+     * Data model passed into JTE prompt templates.
+     *
+     * @property query User query.
+     * @property passages Retrieved passages.
+     * @property causalPaths Optional causal paths.
+     * @property causalGraphSummary Optional graph summary.
+     * @property pathSummaries Optional natural-language path summaries.
+     */
     data class Model(
         val query: String,
         val passages: List<String>,
@@ -33,6 +47,13 @@ class JtePromptRenderer(
         return engine
     }
 
+    /**
+     * Renders the requested JTE prompt template if one is available.
+     *
+     * @param templateStyle Template style suffix.
+     * @param model Template model.
+     * @return Rendered prompt text, or `null` when no template is available.
+     */
     fun render(
         templateStyle: String,
         model: Model,

@@ -4,7 +4,19 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Simple text-template renderer used as a fallback when JTE templates are unavailable.
+ */
 class TemplateRenderer {
+    /**
+     * Rendering context consumed by [TemplateRenderer].
+     *
+     * @property query User query.
+     * @property passages Retrieved passages.
+     * @property causalPaths Optional causal paths.
+     * @property causalGraphSummary Optional graph summary.
+     * @property pathSummaries Optional path summaries.
+     */
     data class Context(
         val query: String,
         val passages: List<String>,
@@ -13,6 +25,13 @@ class TemplateRenderer {
         val pathSummaries: List<String>?,
     )
 
+    /**
+     * Renders a template using the supplied context.
+     *
+     * @param template Template text.
+     * @param context Rendering context.
+     * @return Rendered template output.
+     */
     fun render(
         template: String,
         context: Context,

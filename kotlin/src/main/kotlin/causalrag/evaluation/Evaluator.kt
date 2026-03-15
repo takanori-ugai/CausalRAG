@@ -15,6 +15,14 @@ import kotlin.math.min
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Aggregated evaluation output for a pipeline run.
+ *
+ * @property metrics Average score per metric.
+ * @property detailedScores Per-example scores for each metric.
+ * @property errorAnalysis Optional error messages keyed by metric or phase.
+ * @property rawEvaluations Optional raw evaluation payloads.
+ */
 @Serializable
 data class EvaluationResult(
     val metrics: Map<String, Double>,
@@ -23,11 +31,24 @@ data class EvaluationResult(
     val rawEvaluations: Map<String, JsonElement>? = null,
 )
 
+/**
+ * Single evaluation example consumed by [CausalEvaluator].
+ *
+ * @property question Evaluation prompt.
+ * @property groundTruth Optional reference answer.
+ */
 data class EvalExample(
     val question: String,
     val groundTruth: String? = null,
 )
 
+/**
+ * Evaluates generated answers and causal reasoning quality.
+ *
+ * @param llmInterface Optional LLM interface used for evaluation-driven scoring.
+ * @param metrics Optional list of metric names to compute; defaults are used when omitted.
+ * @param resultsDir Optional directory where evaluation reports are persisted.
+ */
 class CausalEvaluator(
     private val llmInterface: LLMInterface? = null,
     metrics: List<String>? = null,
@@ -42,6 +63,16 @@ class CausalEvaluator(
 
     private val metricsToUse = metrics ?: defaultMetrics
 
+    /**
+     * Evaluates model outputs against configured metrics.
+     *
+     * @param questions Questions asked to the system.
+     * @param answers Answers produced by the system.
+     * @param contexts Retrieved contexts aligned with [questions].
+     * @param causalPaths Optional retrieved causal paths aligned with [questions].
+     * @param groundTruths Optional reference answers aligned with [questions].
+     * @return Aggregated evaluation result.
+     */
     fun evaluate(
         questions: List<String>,
         answers: List<String>,
@@ -348,6 +379,16 @@ Overall rating:
     }
 
     companion object {
+        /**
+         * Runs a pipeline over evaluation data and scores the resulting answers.
+         *
+         * @param pipeline Pipeline under evaluation.
+         * @param evalData Evaluation examples.
+         * @param metrics Metrics to compute. Uses defaults when omitted.
+         * @param llmInterface Optional evaluator model override.
+         * @param resultsDir Optional output directory for serialized reports.
+         * @return Evaluation summary for the run.
+         */
         fun evaluatePipeline(
             pipeline: CausalRAGPipeline,
             evalData: List<EvalExample>,

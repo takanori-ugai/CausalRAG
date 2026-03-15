@@ -13,6 +13,9 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/**
+ * Tests pipeline initialization, indexing, querying, and persistence.
+ */
 class TestPipeline {
     private lateinit var tempDir: Path
     private lateinit var configPath: Path
@@ -24,6 +27,9 @@ class TestPipeline {
             "Coastal flooding causes population displacement.",
         )
 
+    /**
+     * Creates a temporary configuration for each test run.
+     */
     @BeforeTest
     fun setUp() {
         tempDir = Files.createTempDirectory("causalrag-test")
@@ -31,11 +37,17 @@ class TestPipeline {
         writeTestConfig(configPath)
     }
 
+    /**
+     * Removes temporary test files and directories.
+     */
     @AfterTest
     fun tearDown() {
         tempDir.toFile().deleteRecursively()
     }
 
+    /**
+     * Verifies that the pipeline initializes its core components.
+     */
     @Test
     fun testPipelineInit() {
         val pipeline = CausalRAGPipeline(configPath = configPath.toString())
@@ -44,6 +56,9 @@ class TestPipeline {
         assertNotNull(pipeline.vectorRetriever)
     }
 
+    /**
+     * Verifies that indexing populates the causal graph.
+     */
     @Test
     fun testDocumentIndexing() {
         val pipeline = CausalRAGPipeline(configPath = configPath.toString())
@@ -52,6 +67,9 @@ class TestPipeline {
         assertTrue(graph.numberOfNodes() > 0)
     }
 
+    /**
+     * Verifies that retrieval APIs return context and causal paths.
+     */
     @Test
     fun testQueryExecution() {
         val pipeline = CausalRAGPipeline(configPath = configPath.toString())
@@ -62,6 +80,9 @@ class TestPipeline {
         assertTrue(paths.isNotEmpty())
     }
 
+    /**
+     * Verifies that saved pipeline artifacts can be loaded into a fresh instance.
+     */
     @Test
     fun testSaveAndLoad() {
         val pipeline1 = CausalRAGPipeline(configPath = configPath.toString())

@@ -1,15 +1,26 @@
 package causalrag
 
 import causalrag.causalgraph.builder.CausalGraphBuilder
+import causalrag.causalgraph.builder.CausalTriple
+import causalrag.causalgraph.builder.CausalTripleExtractor
+import causalrag.causalgraph.graph.DirectedGraph
 import causalrag.causalgraph.retriever.CausalPathRetriever
+import causalrag.generator.llm.LLMInterface
+import causalrag.utils.EmbeddingModel
+import io.mockk.every
+import io.mockk.mockk
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/**
+ * Tests causal graph construction, persistence, and path retrieval.
+ */
 class TestCausalGraph {
     private lateinit var builder: CausalGraphBuilder
     private lateinit var retriever: CausalPathRetriever
@@ -22,6 +33,9 @@ class TestCausalGraph {
             "Coastal flooding causes population displacement.",
         )
 
+    /**
+     * Initializes a small graph and retriever for each test.
+     */
     @BeforeTest
     fun setUp() {
         builder = CausalGraphBuilder(extractorMethod = "rule")
@@ -30,11 +44,17 @@ class TestCausalGraph {
         tempFile = Files.createTempFile("causalrag-graph", ".json")
     }
 
+    /**
+     * Cleans up temporary files created during testing.
+     */
     @AfterTest
     fun tearDown() {
         Files.deleteIfExists(tempFile)
     }
 
+    /**
+     * Verifies that causal edges are extracted into the graph.
+     */
     @Test
     fun testGraphConstruction() {
         val graph = builder.getGraph()
@@ -46,6 +66,9 @@ class TestCausalGraph {
         assertTrue(hasRelation("coastal flooding", "population displacement"))
     }
 
+    /**
+     * Verifies that graphs can be saved and loaded without losing structure.
+     */
     @Test
     fun testSaveLoadGraph() {
         builder.save(tempFile.toString())
@@ -64,6 +87,9 @@ class TestCausalGraph {
         assertEquals(original.numberOfEdges(), reloaded.numberOfEdges(), "Edge count mismatch after reload")
     }
 
+    /**
+     * Verifies that the retriever can recover causal paths from the graph.
+     */
     @Test
     fun testCausalPathRetrieval() {
         val paths = retriever.retrievePaths("What are the effects of climate change?", maxPaths = 3)
@@ -75,6 +101,9 @@ class TestCausalGraph {
         assertTrue(hasClimatePath, "Should find paths starting with climate change")
     }
 
+    /**
+     * Verifies that relevant nodes are returned for a query.
+     */
     @Test
     fun testQueryRelevance() {
         val nodes =
@@ -89,6 +118,166 @@ class TestCausalGraph {
         for (term in required) {
             assertTrue(labels.any { it.lowercase().contains(term) }, "Should find $term in relevant nodes")
         }
+    }
+
+    /**
+     * Verifies that induced subgraphs retain selected isolated nodes.
+     */
+    @Test
+    fun testSubgraphPreservesIsolatedNodes() {
+        val graph = DirectedGraph()
+        graph.addEdge("a", "b", 1.0)
+        graph.addEdge("b", "c", 1.0)
+        graph.addEdge("isolated", "isolated-target", 1.0)
+
+        val subgraph = graph.subgraph(setOf("a", "b", "isolated-target"))
+
+        assertEquals(setOf("a", "b", "isolated-target"), subgraph.nodes())
+        assertEquals(1, subgraph.numberOfEdges())
+        assertTrue(subgraph.edgeWeight("a", "b") != null)
+        assertEquals(0, subgraph.inDegree("isolated-target"))
+        assertEquals(0, subgraph.outDegree("isolated-target"))
+    }
+
+    /**
+     * Verifies that node embedding accessors return defensive copies.
+     */
+    @Test
+    fun testEmbeddingAccessorsDoNotExposeMutableState() {
+        val anyNodeId = builder.nodeEmbeddings.keys.first()
+
+        val fromGetter = assertNotNull(builder.getEmbedding(anyNodeId))
+        val getterOriginal = fromGetter.copyOf()
+        fromGetter[0] += 123.0
+        assertTrue(builder.getEmbedding(anyNodeId)!!.contentEquals(getterOriginal))
+
+        val fromMap = assertNotNull(builder.nodeEmbeddings[anyNodeId])
+        val mapOriginal = fromMap.copyOf()
+        fromMap[0] -= 456.0
+        assertTrue(builder.nodeEmbeddings[anyNodeId]!!.contentEquals(mapOriginal))
+    }
+
+    /**
+     * Verifies that repeated triples preserve the highest observed confidence.
+     */
+    @Test
+    fun testDuplicateTriplesKeepHighestConfidence() {
+        val localBuilder = CausalGraphBuilder(normalizeNodes = false, extractorMethod = "rule")
+        localBuilder.addTriples(
+            listOf(
+                CausalTriple("rain", "flooding", 0.9),
+                CausalTriple("rain", "flooding", 0.6),
+            ),
+        )
+
+        val weight = localBuilder.getGraph().edgeWeight("rain", "flooding")
+
+        assertEquals(0.9, weight)
+        assertEquals(1, localBuilder.getGraph().numberOfEdges())
+    }
+
+    /**
+     * Verifies that mutating a returned graph snapshot does not affect builder state.
+     */
+    @Test
+    fun testGetGraphReturnsDefensiveCopy() {
+        val snapshot = builder.getGraph()
+        val originalEdgeCount = snapshot.numberOfEdges()
+
+        snapshot.addEdge("rogue-cause", "rogue-effect", 1.0)
+
+        assertEquals(originalEdgeCount + 1, snapshot.numberOfEdges())
+        assertEquals(originalEdgeCount, builder.getGraph().numberOfEdges())
+        assertTrue(builder.describeGraph().contains("rogue-cause").not())
+    }
+
+    /**
+     * Verifies that the retriever snapshots the latest builder graph per call.
+     */
+    @Test
+    fun testRetrieverSeesGraphUpdatesAfterConstruction() {
+        builder.addTriples(listOf(CausalTriple("population displacement", "economic stress", 0.8)))
+
+        val nodes = retriever.retrievePathNodes("climate change", topK = 5, maxHops = 4, includeSimilar = false)
+        val labels = nodes.map { builder.nodeText[it] ?: it }
+
+        assertTrue(labels.any { it.equals("economic stress", ignoreCase = true) })
+    }
+
+    /**
+     * Verifies that a failed load does not destroy the existing in-memory graph.
+     */
+    @Test
+    fun testFailedLoadPreservesExistingState() {
+        Files.writeString(
+            tempFile,
+            """
+            {
+              "nodes": {
+                "climate change": "climate change",
+                "broken target": "broken target"
+              },
+              "edges": [
+                {
+                  "from": "climate change",
+                  "to": "broken target",
+                  "weight": 0.9
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+        val failingBuilder =
+            CausalGraphBuilder(
+                extractorMethod = "rule",
+                embeddingModel =
+                    object : EmbeddingModel {
+                        override fun encode(text: String): DoubleArray {
+                            // The fixture omits serialized embeddings, so load() falls back to
+                            // re-encoding each node before any in-memory state is replaced.
+                            if (text == "broken target") {
+                                error("synthetic embedding failure")
+                            }
+                            return doubleArrayOf(text.length.toDouble())
+                        }
+                    },
+            )
+        failingBuilder.indexDocuments(testDocuments)
+        val originalGraph = failingBuilder.getGraph()
+        val originalLabels = failingBuilder.nodeText.toMap()
+
+        val loaded = failingBuilder.load(tempFile.toString())
+
+        assertTrue(loaded.not())
+        assertEquals(originalGraph.numberOfNodes(), failingBuilder.getGraph().numberOfNodes())
+        assertEquals(originalGraph.numberOfEdges(), failingBuilder.getGraph().numberOfEdges())
+        assertEquals(originalLabels, failingBuilder.nodeText)
+    }
+
+    /**
+     * Verifies that hybrid extraction keeps the strongest confidence across rule and LLM duplicates.
+     */
+    @Test
+    fun testHybridExtractionPrefersHigherConfidenceDuplicate() {
+        val llm = mockk<LLMInterface>()
+        every {
+            llm.generate(
+                any(),
+                temperature = 0.1,
+                maxTokens = any(),
+                stream = any(),
+                jsonMode = true,
+                jsonArrayMode = true,
+            )
+        } returns """[{"cause":"climate change","effect":"coastal flooding","confidence":0.95}]"""
+        val extractor = CausalTripleExtractor(method = "hybrid", llmInterface = llm)
+
+        val triples = extractor.extract("Climate change causes coastal flooding.")
+
+        assertEquals(1, triples.size)
+        assertEquals("climate change", triples.first().cause)
+        assertEquals("coastal flooding", triples.first().effect)
+        assertEquals(0.95, triples.first().confidence)
     }
 
     private fun hasRelation(
