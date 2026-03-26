@@ -1,6 +1,8 @@
 package causalrag.examples
 
 import causalrag.CausalRAGPipeline
+import causalrag.causalgraph.builder.CausalGraphBuilder
+import causalrag.causalgraph.explainer.CausalGraphExplainer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -24,6 +26,7 @@ fun main(args: Array<String>) {
     when (args.first()) {
         "index" -> handleIndex(args.drop(1))
         "query" -> handleQuery(args.drop(1))
+        "visualize" -> handleVisualize(args.drop(1))
         "serve" -> handleServe()
         "evaluate" -> handleEvaluate(args.drop(1))
         else -> printUsage()
@@ -117,6 +120,41 @@ private fun handleServe() {
     println("Serve is not implemented in the Kotlin port yet.")
 }
 
+private fun handleVisualize(args: List<String>) {
+    val opts = CliUtils.parseOptions(args)
+    val indexDir = opts["index"] ?: opts["i"]
+    val output = opts["output"] ?: opts["o"] ?: "graph_viz.html"
+
+    if (indexDir == null) {
+        println("Missing required --index/-i")
+        return
+    }
+
+    val graphPath = Path.of(indexDir).resolve("graph.json")
+    if (!Files.exists(graphPath)) {
+        println("Graph file not found: $graphPath")
+        return
+    }
+
+    try {
+        val builder = CausalGraphBuilder(graphPath = graphPath.toString())
+        val explainer = CausalGraphExplainer(builder.getGraph(), builder.nodeText)
+        val html = explainer.generateGraphVizHtml()
+
+        val outputPath = Path.of(output)
+        val parent = outputPath.parent
+        if (parent != null) {
+            Files.createDirectories(parent)
+        }
+        Files.writeString(outputPath, html, StandardCharsets.UTF_8)
+        println("Saved graph visualization to $outputPath")
+    } catch (ex: java.io.IOException) {
+        println("Failed to write visualization HTML: ${ex.message}")
+    } catch (ex: RuntimeException) {
+        println("Failed to generate visualization: ${ex.message}")
+    }
+}
+
 private fun handleEvaluate(args: List<String>) {
     val opts = CliUtils.parseOptions(args)
     val evalData = opts["eval-data"]
@@ -189,6 +227,7 @@ CausalRAG Kotlin CLI
 Usage:
   cli index --input <dir|file> --output <dir> [--model <embedding_model>] [--config <path>]
   cli query --index <dir> --query <text> [--model <llm_model>] [--top-k <n>] [--config <path>]
+  cli visualize --index <dir> [--output <html_file>]
   cli serve
   cli evaluate --eval-data <path> [--index <dir>] [--output-dir <dir>] [--model-name <llm_model>] [--eval-model <llm_model>] [--embedding-model <embedding_model>] [--api-key <key>] [--provider <name>]
   cli --version
