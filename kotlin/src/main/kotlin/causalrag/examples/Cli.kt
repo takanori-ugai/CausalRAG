@@ -131,16 +131,26 @@ private fun handleVisualize(args: List<String>) {
     }
 
     val graphPath = Path.of(indexDir).resolve("graph.json")
-    if (!Files.exists(graphPath)) {
-        println("Graph file not found: $graphPath")
+    if (!Files.isRegularFile(graphPath)) {
+        println("Graph file not found or not a regular file: $graphPath")
         return
     }
 
-    try {
-        val builder = CausalGraphBuilder(graphPath = graphPath.toString())
-        val explainer = CausalGraphExplainer(builder.getGraph(), builder.nodeText)
-        val html = explainer.generateGraphVizHtml()
+    val html =
+        try {
+            val builder = CausalGraphBuilder(enableEmbeddings = false)
+            if (!builder.load(graphPath.toString())) {
+                println("Failed to load graph from $graphPath. See logs for details.")
+                return
+            }
+            val explainer = CausalGraphExplainer(builder.getGraph(), builder.nodeText)
+            explainer.generateGraphVizHtml()
+        } catch (ex: RuntimeException) {
+            println("Failed to generate visualization: ${ex.message}")
+            return
+        }
 
+    try {
         val outputPath = Path.of(output)
         val parent = outputPath.parent
         if (parent != null) {
@@ -150,8 +160,6 @@ private fun handleVisualize(args: List<String>) {
         println("Saved graph visualization to $outputPath")
     } catch (ex: java.io.IOException) {
         println("Failed to write visualization HTML: ${ex.message}")
-    } catch (ex: RuntimeException) {
-        println("Failed to generate visualization: ${ex.message}")
     }
 }
 
