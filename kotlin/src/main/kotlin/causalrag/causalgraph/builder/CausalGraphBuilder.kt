@@ -429,6 +429,7 @@ class CausalGraphBuilder(
     graphPath: String? = null,
     embeddingModel: EmbeddingModel? = null,
     embeddingApiKey: String? = null,
+    enableEmbeddings: Boolean = true,
 ) {
     private val graph = DirectedGraph()
     private val _nodeText: MutableMap<String, String> = mutableMapOf()
@@ -439,7 +440,11 @@ class CausalGraphBuilder(
     val nodeText: Map<String, String> get() = _nodeText
     private val nodeVariants: MutableMap<String, MutableList<String>> = mutableMapOf()
     private val encoder: EmbeddingModel? =
-        embeddingModel ?: EmbeddingModelFactory.createDefault(modelName, embeddingApiKey)
+        if (enableEmbeddings) {
+            embeddingModel ?: EmbeddingModelFactory.createDefault(modelName, embeddingApiKey)
+        } else {
+            null
+        }
     private val _nodeEmbeddings: MutableMap<String, DoubleArray> = mutableMapOf()
 
     /**
