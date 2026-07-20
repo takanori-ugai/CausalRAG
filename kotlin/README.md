@@ -108,6 +108,13 @@ Query an existing index:
 ./gradlew execute -PmainClass=causalrag.examples.CliKt --args="query --index causalrag_index --query \"What causes coastal flooding?\""
 ```
 
+Generate an interactive graph visualization (HTML):
+```bash
+./gradlew execute -PmainClass=causalrag.examples.CliKt --args="visualize --index causalrag_index --output graph_viz.html"
+```
+
+This command loads `causalrag_index/graph.json` and writes a D3-based HTML graph you can open in a browser.
+
 Evaluate a pipeline:
 ```bash
 ./gradlew execute -PmainClass=causalrag.examples.CliKt --args="evaluate --eval-data ../data/evaluation/evaluation_dataset.json --index causalrag_index"
