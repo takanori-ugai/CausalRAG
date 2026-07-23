@@ -40,11 +40,11 @@ dependencies {
     implementation("gg.jte:jte-kotlin:3.2.4")
 
     // LangChain4j dependencies
-    implementation("dev.langchain4j:langchain4j:1.17.2")
-    implementation("dev.langchain4j:langchain4j-open-ai:1.17.2")
-    implementation("dev.langchain4j:langchain4j-azure-open-ai:1.17.2")
-    implementation("dev.langchain4j:langchain4j-ollama:1.17.2")
-    implementation("dev.langchain4j:langchain4j-community-neo4j:1.17.2-beta27")
+    implementation("dev.langchain4j:langchain4j:1.18.0")
+    implementation("dev.langchain4j:langchain4j-open-ai:1.18.0")
+    implementation("dev.langchain4j:langchain4j-azure-open-ai:1.18.0")
+    implementation("dev.langchain4j:langchain4j-ollama:1.18.0")
+    implementation("dev.langchain4j:langchain4j-community-neo4j:1.18.0-beta27")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.0")
     testImplementation("io.mockk:mockk:1.14.11")
