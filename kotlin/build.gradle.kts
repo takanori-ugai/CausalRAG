@@ -46,7 +46,7 @@ dependencies {
     implementation("dev.langchain4j:langchain4j-ollama:1.20.0")
     implementation("dev.langchain4j:langchain4j-community-neo4j:1.20.0-beta30")
 
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.10")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.20")
     testImplementation("io.mockk:mockk:1.14.11")
 }
 
