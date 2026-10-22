@@ -44,7 +44,7 @@ dependencies {
     implementation("dev.langchain4j:langchain4j-open-ai:1.22.0")
     implementation("dev.langchain4j:langchain4j-azure-open-ai:1.22.0")
     implementation("dev.langchain4j:langchain4j-ollama:1.22.0")
-    implementation("dev.langchain4j:langchain4j-community-neo4j:1.20.0-beta30")
+    implementation("dev.langchain4j:langchain4j-community-neo4j:1.22.0-beta32")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.21")
     testImplementation("io.mockk:mockk:1.14.11")
